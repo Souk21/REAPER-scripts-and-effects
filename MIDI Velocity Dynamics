@@ -1,0 +1,78 @@
+desc:MIDI Velocity Dynamics : Souk21
+
+slider1:2<1,40,.01>Ratio
+slider2:63<1,127>Threshold
+slider3:0<-127,127>Makeup
+
+@init
+thresh = 100;
+ratio = 1;
+size = 500;
+makeup = 0;
+noteOn = $x90;
+noteOff = $x80;
+velCount = 5;
+lastVelIn = 1024;
+lastVelOut = lastVelIn + velCount;
+lastNotes = lastVelOut + velCount;
+velIndex = 0;
+function velToPosX(vel) ((vel/127*size));
+function velToPosY(vel) (size-(vel/127*size));
+function resetLastVel() (memset(lastVelIn, -1, velCount * 3));
+function clamp(value) (max(min(value,127),0)); 
+resetLastVel();
+
+@slider
+ratio=slider1;
+thresh=slider2;
+makeup=slider3;
+resetLastVel();
+
+@block
+function processNoteOn(msg2, msg3) (
+  lastVelIn[velIndex] = msg3;
+  lastNotes[velIndex] = msg2;
+  newVel = msg3;
+  msg3 > thresh ? (diff = msg3 - thresh; diff /= ratio; newVel = thresh + diff);
+  newVel = clamp(newVel+makeup);
+  lastVelOut[velIndex] = newVel;
+  velIndex += 1;
+  velIndex >= velCount ? velIndex = 0;
+  newVel;
+);
+function processNoteOff(msg2, msg3) (
+  id = 0;
+  while (id < velCount) (
+    lastVelIn[id] != -1 ? lastNotes[id] == msg2 ? (lastVelIn[id] = -1);
+    id += 1;
+  );
+);
+while(midirecv(offset,msg1,msg2,msg3)) (
+  noteStatus = msg1 & $xF0;
+  channel = msg1 & $x0F;
+  vel = msg3;
+  noteStatus==noteOn && msg3 != 0 ? (vel = processNoteOn(msg2,msg3));
+  noteStatus==noteOff || noteStatus==noteOn && msg3 == 0 ? (processNoteOff(msg2,msg3));
+  midisend(offset,msg1,msg2,vel);
+);
+
+@gfx 500, 500
+scaledThresh = clamp(thresh + makeup);
+threshPos = velToPosY(scaledThresh);
+endPos = velToPosY(thresh)-(velToPosY(thresh)/ratio) - makeup * (size/127);
+gfx_set(1,0,0);
+gfx_line(0,threshPos,size,threshPos); //Thresh
+gfx_set(1,1,1);
+gfx_x = 0;
+gfx_y = size;
+makeup < 0 ? gfx_lineto(velToPosX(min(-makeup,thresh)),size) : gfx_y = velToPosY(makeup);
+makeup + thresh > 127 ? (gfx_lineto(velToPosX(thresh+(127-(makeup+thresh))),0)) :
+gfx_lineto(velToPosX(thresh),threshPos); //Below
+gfx_line(velToPosX(thresh),threshPos,size,endPos);
+id = 0;
+gfx_set(1,0,0,0.4);
+while (id < velCount) (
+  lastVelIn[id] != -1 ? gfx_circle(velToPosX(lastVelIn[id]),velToPosY(lastVelOut[id]),5,1);
+  id += 1;
+);
+
