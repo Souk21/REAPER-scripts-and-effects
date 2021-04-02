@@ -9,3 +9,9 @@ ReaPack link:
 Scale velocity with a 'compressor-like' display
 
 ![MIDI Dynamics Screenshot](VelocityDynamicsScreenshot.png)
+
+## PlayState Mixer
+
+Applies a different gain to the track depending on if transport is playing, stopped or recording
+
+![PlayState Mixer Screenshot](PlayStateMixerScreenshot.png)
