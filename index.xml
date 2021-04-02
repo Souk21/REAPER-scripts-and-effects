@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="f2585b7e8f2ee8484289ed51d5634bf384bdcd68">
+<index version="1" name="Souk21 ReaPack" commit="91558b5be7a7d6e1fc448c9cb26c2edfb8b0f475">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -17,6 +17,20 @@
       <version name="1.1" author="Souk21" time="2021-04-02T08:48:17Z">
         <changelog><![CDATA[- The view is now scalable instead of being fixed to 500px]]></changelog>
         <source>https://github.com/Souk21/REAPER-scripts-and-effects/raw/f2585b7e8f2ee8484289ed51d5634bf384bdcd68/JSFX/MIDI%20Velocity%20Compressor.jsfx</source>
+      </version>
+    </reapack>
+    <reapack name="PlayState Mixer.jsfx" type="effect" desc="PlayState Mixer : Souk21">
+      <metadata>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 Applies a different gain to the track depending on if transport is playing, stopped or recording\par}
+}
+]]></description>
+      </metadata>
+      <version name="1.0" author="Souk21" time="2021-04-02T09:11:25Z">
+        <source>https://github.com/Souk21/REAPER-scripts-and-effects/raw/91558b5be7a7d6e1fc448c9cb26c2edfb8b0f475/JSFX/PlayState%20Mixer.jsfx</source>
       </version>
     </reapack>
   </category>
