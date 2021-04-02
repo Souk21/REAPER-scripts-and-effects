@@ -1,7 +1,9 @@
-version: 1.0
+version: 1.1
 desc: MIDI Velocity Compressor : Souk21
 author: Souk21
 about: Offers a compressorlike view to tweak incoming MIDI velocity
+changelog:
+  - The view is now scalable instead of being fixed to 500px
 
 slider1:2<1,40,.01>Ratio
 slider2:63<1,127>Threshold
@@ -13,7 +15,6 @@ out_pin:none
 @init
 thresh = 100;
 ratio = 1;
-size = 500;
 makeup = 0;
 noteOn = $x90;
 noteOff = $x80;
@@ -63,6 +64,7 @@ while(midirecv(offset,msg1,msg2,msg3)) (
 );
 
 @gfx 500, 500
+size = min(gfx_w,gfx_h);
 scaledThresh = clamp(thresh + makeup);
 threshPos = velToPosY(scaledThresh);
 endPos = velToPosY(thresh)-(velToPosY(thresh)/ratio) - makeup * (size/127);
@@ -81,4 +83,3 @@ while (id < velCount) (
   lastVelIn[id] != -1 ? gfx_circle(velToPosX(lastVelIn[id]),velToPosY(lastVelOut[id]),5,1);
   id += 1;
 );
-
