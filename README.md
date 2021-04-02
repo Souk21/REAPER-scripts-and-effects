@@ -1,4 +1,4 @@
-# JSFX for Reaper DAW
+# JSFX and scripts for Reaper DAW
 
 ## MIDI Velocity Dynamics
 

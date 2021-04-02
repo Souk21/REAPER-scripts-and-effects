@@ -1,8 +1,14 @@
-desc:MIDI Velocity Dynamics : Souk21
+version: 1.0
+desc: MIDI Velocity Compressor : Souk21
+author: Souk21
+about: Offers a compressorlike view to tweak incoming MIDI velocity
 
 slider1:2<1,40,.01>Ratio
 slider2:63<1,127>Threshold
 slider3:0<-127,127>Makeup
+
+in_pin:none
+out_pin:none
 
 @init
 thresh = 100;
@@ -19,7 +25,7 @@ velIndex = 0;
 function velToPosX(vel) ((vel/127*size));
 function velToPosY(vel) (size-(vel/127*size));
 function resetLastVel() (memset(lastVelIn, -1, velCount * 3));
-function clamp(value) (max(min(value,127),0)); 
+function clamp(value) (max(min(value,127),0));
 resetLastVel();
 
 @slider
