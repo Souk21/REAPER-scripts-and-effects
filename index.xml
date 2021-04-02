@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="91558b5be7a7d6e1fc448c9cb26c2edfb8b0f475">
+<index version="1" name="Souk21 ReaPack" commit="2f7eedca3ccbbbd3dba6d992d2564238d0b6eae9">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -31,6 +31,10 @@
       </metadata>
       <version name="1.0" author="Souk21" time="2021-04-02T09:11:25Z">
         <source>https://github.com/Souk21/REAPER-scripts-and-effects/raw/91558b5be7a7d6e1fc448c9cb26c2edfb8b0f475/JSFX/PlayState%20Mixer.jsfx</source>
+      </version>
+      <version name="1.1" author="Souk21" time="2021-04-02T10:41:03Z">
+        <changelog><![CDATA[- Added Paused and Record Paused states]]></changelog>
+        <source>https://github.com/Souk21/REAPER-scripts-and-effects/raw/2f7eedca3ccbbbd3dba6d992d2564238d0b6eae9/JSFX/PlayState%20Mixer.jsfx</source>
       </version>
     </reapack>
   </category>
