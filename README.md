@@ -1,6 +1,10 @@
 # JSFX and scripts for Reaper DAW
 
-## MIDI Velocity Dynamics
+ReaPack link:
+
+    https://raw.githubusercontent.com/Souk21/REAPER-scripts-and-effects/master/index.xml
+
+## MIDI Velocity Compressor
 
 Scale velocity with a 'compressor-like' display
 
