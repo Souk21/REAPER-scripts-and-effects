@@ -1,17 +1,21 @@
-version: 1.0
+version: 1.1
 desc: PlayState Mixer : Souk21
 author: Souk21
 about: Applies a different gain to the track depending on if transport is playing, stopped or recording
+changelog:
+  - Added Paused and Record Paused states
 
 slider1:gain0=0<-150,12,.1>Stopped (dB)
 slider2:gain1=0<-150,12,.1>Playing (dB)
 slider3:gain5=0<-150,12,.1>Recording (dB)
+slider4:gain2=0<-150,12,.1>Paused (dB)
+slider5:gain6=0<-150,12,.1>Record Paused (dB)
 
 //0=stopped, <0=error, 1=playing, 2=paused, 5=recording, 6=record paused
 
 @sample
 function db2lin(db) (10^(db/20));
-vol = play_state == 0 ? gain0 : play_state == 1 ? gain1 : play_state == 5 ? gain5 : 0;
+vol = play_state == 0 ? gain0 : play_state == 1 ? gain1 : play_state == 5 ? gain5 : play_state == 2 ? gain2 : play_state == 6 ? gain6 : 0;
 ch = 0;
 loop(num_ch,
   spl(ch) = db2lin(vol) * spl(ch);
