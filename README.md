@@ -4,6 +4,10 @@ ReaPack link:
 
     https://raw.githubusercontent.com/Souk21/REAPER-scripts-and-effects/master/index.xml
 
+## Scripts
+
+- Set block (buffer) size
+
 ## MIDI Velocity Compressor
 
 Scale velocity with a 'compressor-like' display
