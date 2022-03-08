@@ -1,6 +1,8 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.0
+--@version 1.01
+--@changelog
+--   Added JS_ReaScriptAPI check
 --@metapackage
 --@provides
 --   [main] . > souk21_Set block (buffer) size (prompt).lua
@@ -18,6 +20,11 @@ local custom_size = ""
 -- Modify the filename (e.g "Set block size to 1234.lua" will set the size to 1234)
 -- The custom size above takes precedence over the filename
 -- If custom_size is not set and filename doesn't end with a number, the script will prompt for the size
+
+if reaper.JS_Window_Find == nil then
+  reaper.ShowMessageBox("You can get download it from ReaPack", "This script needs js_ReaScriptAPI to be installed", 0) 
+  return
+end
 
 local cancelled = false
 local size = ""
