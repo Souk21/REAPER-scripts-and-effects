@@ -1,10 +1,8 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.03
+--@version 1.04
 --@changelog
---   Added checkmark for current size in menu
---   Script now exit early if no option is selected from the menu
---   Code cleanup
+--   Fixed bug where 2048 wouldn't show in the menu if selected
 --@metapackage
 --@provides
 --   [main] . > souk21_Set block (buffer) size (menu).lua
@@ -34,10 +32,10 @@ end
 local prompt = false
 local size = ""
 if custom_size ~= "" then
-  size = custom_size;
+  size = custom_size
 else
   local script_name = ({reaper.get_action_context()})[2]:match("([^/\\_]+)%.lua$") -- Get filename without the extension
-  filename_size = script_name:match("%d*$"); -- Matches digits at the end of filename
+  filename_size = script_name:match("%d*$") -- Matches digits at the end of filename
   if filename_size ~= "" then
     size = filename_size
   else
@@ -49,21 +47,22 @@ else
           {"#Set block size", nil},
         }
 
-        local buff = 32;
-        local current_added = false;
+        local buff = 32
+        local current_added = false
         
         for i = 0, 5 do
-          buff = buff * 2;
+          buff = buff * 2
           if retval and not current_added and current_size < buff then
             table.insert(menu_items, {"!"..tostring(current_size), tostring(current_size)})
-            current_added = true;
+            current_added = true
           end
           if current_size ~= buff then
             table.insert(menu_items, {tostring(buff),tostring(buff)})
           end
         end
-        if retval and not current_added and current_size > buff then
+        if retval and not current_added and current_size >= buff then
           table.insert(menu_items, {"!"..tostring(current_size), tostring(current_size)})
+          current_added = true
         end
 
         table.insert(menu_items, {"Prompt", nil})
@@ -71,6 +70,7 @@ else
         for i = 1, #menu_items do
           menu = menu .. menu_items[i][1] .. "|"
         end
+        -- Credits to amagalma for the menu code
         local title = "hidden" .. reaper.genGuid()
         gfx.init(title, 0, 0, 0, 0, 0)
         local hwnd = reaper.JS_Window_Find(title, true)
