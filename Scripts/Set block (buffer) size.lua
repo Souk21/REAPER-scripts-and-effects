@@ -1,8 +1,9 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.04
+--@version 1.05
 --@changelog
---   Fixed bug where 2048 wouldn't show in the menu if selected
+--   Automatically set "Request block size"
+--   Added block size 32 to menu
 --@metapackage
 --@provides
 --   [main] . > souk21_Set block (buffer) size (menu).lua
@@ -47,10 +48,10 @@ else
           {"#Set block size", nil},
         }
 
-        local buff = 32
+        local buff = 16
         local current_added = false
         
-        for i = 0, 5 do
+        for i = 0, 6 do
           buff = buff * 2
           if retval and not current_added and current_size < buff then
             table.insert(menu_items, {"!"..tostring(current_size), tostring(current_size)})
@@ -130,6 +131,9 @@ if window ~= nil then
       or protocol == "Dummy Audio" then
         use_asio = false
       end
+    end
+    if id == 1043 then -- "Request block size" checkbox
+      reaper.JS_WindowMessage_Send(hwnd,"BM_SETCHECK", 0x1, 0,0,0)
     end
   end
   
