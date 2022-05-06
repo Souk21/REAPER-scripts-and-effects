@@ -1,9 +1,9 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.05
+--@version 1.06
 --@changelog
---   Automatically set "Request block size"
---   Added block size 32 to menu
+--   Automatically set "Request block size" on Windows
+--   Better menu layout and prompt
 --@metapackage
 --@provides
 --   [main] . > souk21_Set block (buffer) size (menu).lua
@@ -42,16 +42,16 @@ else
   else
     local menu = script_name:match("%(menu%)$") == "(menu)"
     if menu then
-        local retval, current_size = reaper.GetAudioDeviceInfo("BSIZE")
+        local retval, current_size = reaper.GetAudioDeviceInfo("BSIZE", "")
         if retval then current_size = tonumber(current_size) end
         local menu_items = {
-          {"#Set block size", nil},
+          {"#Block size|", nil},
         }
 
-        local buff = 16
+        local buff = 8
         local current_added = false
         
-        for i = 0, 6 do
+        for i = 0, 7 do
           buff = buff * 2
           if retval and not current_added and current_size < buff then
             table.insert(menu_items, {"!"..tostring(current_size), tostring(current_size)})
@@ -65,8 +65,7 @@ else
           table.insert(menu_items, {"!"..tostring(current_size), tostring(current_size)})
           current_added = true
         end
-
-        table.insert(menu_items, {"Prompt", nil})
+        table.insert(menu_items, {"|Custom...", nil})
         local menu = ""
         for i = 1, #menu_items do
           menu = menu .. menu_items[i][1] .. "|"
@@ -78,7 +77,7 @@ else
         if hwnd then
           reaper.JS_Window_Show(hwnd, "HIDE")
         end
-        gfx.x, gfx.y = gfx.mouse_x-52, gfx.mouse_y-70
+        gfx.x, gfx.y = gfx.mouse_x-55, gfx.mouse_y-100
         local selection = gfx.showmenu(menu)
         gfx.quit()
         if selection == 0 then
@@ -96,7 +95,7 @@ end
 
 if prompt then
   local retval
-  retval, size = reaper.GetUserInputs("Set block size", 1, "","")
+  retval, size = reaper.GetUserInputs("Set block size", 1, "Block size","")
   if not retval then return end
 end
 
@@ -132,7 +131,7 @@ if window ~= nil then
         use_asio = false
       end
     end
-    if id == 1043 then -- "Request block size" checkbox
+    if id == 1043 or id == 1045 then -- "Request block size" checkbox (1043 is osx, 1045 is win)
       reaper.JS_WindowMessage_Send(hwnd,"BM_SETCHECK", 0x1, 0,0,0)
     end
   end
