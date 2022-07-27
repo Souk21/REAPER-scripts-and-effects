@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="a56e2c6d09b04ee24ed13ca532c30947ffbe477c">
+<index version="1" name="Souk21 ReaPack" commit="9ba7c7f12ebed0a1042e233bd2470c1c77cbfa35">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -39,6 +39,20 @@
     </reapack>
   </category>
   <category name="Scripts">
+    <reapack name="Key Sequences.lua" type="script" desc="Key Sequences">
+      <metadata>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 Create key sequence shortcuts\par}
+}
+]]></description>
+      </metadata>
+      <version name="1.0" author="Souk21" time="2022-07-27T10:47:27Z">
+        <source main="main">https://github.com/Souk21/REAPER-scripts-and-effects/raw/9ba7c7f12ebed0a1042e233bd2470c1c77cbfa35/Scripts/Key%20Sequences.lua</source>
+      </version>
+    </reapack>
     <reapack name="Set block (buffer) size.lua" type="script" desc="Set block/buffer size">
       <version name="1.0" author="Souk21" time="2022-03-08T22:08:02Z">
         <source main="main" file="souk21_Set block (buffer) size (prompt).lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/2ba1571a9887f9406ae614b69bedd73fa0986464/Scripts/Set%20block%20(buffer)%20size.lua</source>
