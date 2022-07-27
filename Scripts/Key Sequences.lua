@@ -1,9 +1,15 @@
 --@author Souk21
 --@description Key Sequences
 --@about Create key sequence shortcuts
---@version 1.0
+--@changelog
+--   Fix Windows compatibility
+--   Only draw text if hints are shown
+--   Place hint window at 0,0 before showing it
+--   Fix waiting popup to overwrite action
+--   Properly escape display names in code generation (replaces " with ')
+--@version 1.1
 if reaper.CF_GetCommandText == nil or reaper.ImGui_Begin == nil or reaper.JS_Window_Find == nil then
-    reaper.ShowMessageBox("This script requires SWS, ReaImGui and js_ReaScriptAPI", "Missing dependency", 0)
+    reaper.ShowMessageBox("This script requires SWS, ReaImGui and js_ReaScriptAPI.", "Missing dependency", 0)
     return
 end
 
@@ -149,8 +155,8 @@ function ActionPopup(id, section_id)
     if action_popup_requested then
         action_popup_requested = false
         action_popup_opened = true
-        reaper.ImGui_OpenPopup(ctx, popup_name)
         reaper.PromptForAction(1, 0, section_id)
+        reaper.ImGui_OpenPopup(ctx, popup_name)
     end
     if not action_popup_opened then return nil end
     local got_action = false ---@type boolean | nil
@@ -186,10 +192,10 @@ function KeyPopup(id, own_index)
     if key_popup_requested then
         key_popup_requested = false
         key_popup_opened = true
-        reaper.ImGui_OpenPopup(ctx, popup_name)
         gfx.init(gfx_name, 0, 0, 0, 0, 0)
         key_hwnd = reaper.JS_Window_Find(gfx_name, true)
         reaper.JS_Window_SetOpacity(key_hwnd, "ALPHA", 0)
+        reaper.ImGui_OpenPopup(ctx, popup_name)
     end
     if not key_popup_opened then return nil end
     local got_input = false
@@ -530,6 +536,8 @@ function Save()
                 short_name = string.sub(short_name, 0, #short_name - 4)
             end
             action.display = string.format("[%s] %s", action.key_text, short_name)
+            -- replace " with ' to not break code generation
+            action.display = string.gsub(action.display, '"', "'")
             if #action.display > #longest then
                 longest = action.display
             end
@@ -548,7 +556,7 @@ function Save()
   shown = false
   x, y = reaper.GetMousePosition()
   gfx.setfont(1, "sans-serif", 15)
-  gfx.init("]] .. window_name .. [[", 0, 0, 0, x, y)
+  gfx.init("]] .. window_name .. [[", 0, 0, 0, 0, 0)
   hwnd = reaper.JS_Window_Find("]] .. window_name .. [[", false)
   reaper.JS_Window_SetStyle(hwnd, "POPUP")
   reaper.JS_Window_SetOpacity(hwnd,"ALPHA", 0)
@@ -557,25 +565,27 @@ function Save()
     gfx.update()
     if not shown and reaper.time_precise() - time_start > show_after then
       reaper.JS_Window_SetOpacity(hwnd,"ALPHA", 1)
-      w = gfx.measurestr(']] .. longest .. [[')
+      w = gfx.measurestr("]] .. longest .. [[")
       --resize window
       gfx.init("", margin * 2 + w, margin * 2 + gfx.texth * ]] .. #file.actions .. [[, 0, x, y)
       shown = true
     end
-    gfx.set(0.15, 0.15, 0.15)
-    gfx.rect(0, 0, gfx.w, gfx.h, true)
-    gfx.set(1,1,1)
-    gfx.x = margin
-    gfx.y = margin
+    if shown then
+      gfx.set(0.15, 0.15, 0.15)
+      gfx.rect(0, 0, gfx.w, gfx.h, true)
+      gfx.set(1,1,1)
+      gfx.x = margin
+      gfx.y = margin
     ]]
         for _, action in ipairs(file.actions) do
-            result = string.format("%sgfx.drawstr('%s')\n", result, action.display)
+            result = string.format('%s  gfx.drawstr("%s")\n', result, action.display)
             result = result .. [[
-    gfx.y = gfx.y + gfx.texth
-    gfx.x = margin
+      gfx.y = gfx.y + gfx.texth
+      gfx.x = margin
     ]]
         end
-        result = result .. [[cap = gfx.mouse_cap
+        result = result .. [[end
+    cap = gfx.mouse_cap
     cmd = cap & 4 == 4
     shift = cap & 8 == 8
     alt = cap & 16 == 16
@@ -864,7 +874,7 @@ function Frame()
                         waiting_for_action = cur_file_idx
                     end
                     reaper.ImGui_PopStyleVar(ctx)
-                    if waiting_for_action == cur_file_idx then
+                    if waiting_for_action == i then
                         local ret, new_action, new_action_text = ActionPopup(tostring(i),
                             sections[files[cur_file_idx].section].id)
                         if ret == nil then
