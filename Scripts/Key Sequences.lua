@@ -2,12 +2,13 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Fix Windows compatibility
---   Only draw text if hints are shown
---   Place hint window at 0,0 before showing it
---   Fix waiting popup to overwrite action
---   Properly escape display names in code generation (replaces " with ')
---@version 1.1
+--   Add confirmation to remove sequence
+--   Change 'Key / chord' to 'Shortcut' to avoid confusion
+--   Add a way to change font / use default font
+--@version 1.2
+
+local font_name = "Verdana"
+
 if reaper.CF_GetCommandText == nil or reaper.ImGui_Begin == nil or reaper.JS_Window_Find == nil then
     reaper.ShowMessageBox("This script requires SWS, ReaImGui and js_ReaScriptAPI.", "Missing dependency", 0)
     return
@@ -18,8 +19,11 @@ local prefix = "souk21_sequences_"
 local window_title = "Key Sequences"
 local ctx = reaper.ImGui_CreateContext(window_title)
 local draw_list
-local font = reaper.ImGui_CreateFont("Verdana", 13)
-reaper.ImGui_AttachFont(ctx, font)
+local font
+if font_name ~= nil then
+    font = reaper.ImGui_CreateFont(font_name, 13)
+    reaper.ImGui_AttachFont(ctx, font)
+end
 local FLT_MIN = reaper.ImGui_NumericLimits_Float()
 local sections = {
     { name = "Main", id = 0, short_name = "Main" },
@@ -683,7 +687,9 @@ function Frame()
                 began_disabled = true
                 reaper.ImGui_BeginDisabled(ctx, true)
             end
-            if Button("Remove", -FLT_MIN, 25) then
+            if Button("Remove", -FLT_MIN, 25) and
+                reaper.ShowMessageBox("Are you sure you want to delete " .. files[cur_file_idx].name, "Confirmation", 1)
+                == 1 then
                 wants_to_be_removed_id = cur_file_idx
             end
             if began_disabled then
@@ -892,7 +898,7 @@ function Frame()
                 reaper.ImGui_EndTable(ctx)
             end
             MoveCursor(0, 6)
-            if Button("Add Key / Chord", -FLT_MIN, 25) then
+            if Button("Add Shortcut", -FLT_MIN, 25) then
                 adding = { key_text = "...", action_text = "...", action = -1, key = -1 }
                 key_popup_requested = true
                 waiting_for_key = 0
@@ -951,7 +957,9 @@ function Loop()
         Load()
         --window_flags = window_flags | reaper.ImGui_WindowFlags_UnsavedDocument()
     end
-    reaper.ImGui_PushFont(ctx, font)
+    if font_name ~= nil then
+        reaper.ImGui_PushFont(ctx, font)
+    end
     for _, color in pairs(colors) do
         reaper.ImGui_PushStyleColor(ctx, color[1], color[2])
     end
@@ -967,7 +975,9 @@ function Loop()
         Frame()
         reaper.ImGui_End(ctx)
     end
-    reaper.ImGui_PopFont(ctx)
+    if font_name ~= nil then
+        reaper.ImGui_PopFont(ctx)
+    end
     reaper.ImGui_PopStyleVar(ctx, #styles)
     reaper.ImGui_PopStyleColor(ctx, #colors)
     if open then
