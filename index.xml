@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="25805a1abfea3550194358ea85b6fa0a6cc2d3f4">
+<index version="1" name="Souk21 ReaPack" commit="25844ecee42f7218f7cff1e66b8e9ad2c3d0ff37">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -59,6 +59,12 @@ Place hint window at 0,0 before showing it
 Fix waiting popup to overwrite action
 Properly escape display names in code generation (replaces " with ')]]></changelog>
         <source main="main">https://github.com/Souk21/REAPER-scripts-and-effects/raw/857da0d8c9bdcf2cb0973e0a32d40ba05c77d44d/Scripts/Key%20Sequences.lua</source>
+      </version>
+      <version name="1.2" author="Souk21" time="2022-07-28T09:41:43Z">
+        <changelog><![CDATA[Add confirmation to remove sequence
+Change 'Key / chord' to 'Shortcut' to avoid confusion
+Add a way to change font / use default font]]></changelog>
+        <source main="main">https://github.com/Souk21/REAPER-scripts-and-effects/raw/25844ecee42f7218f7cff1e66b8e9ad2c3d0ff37/Scripts/Key%20Sequences.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
