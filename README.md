@@ -6,7 +6,9 @@ ReaPack link:
 
 ## Scripts
 
-- Set block (buffer) size
+- [Set block (buffer) size](https://forum.cockos.com/showthread.php?t=264010)
+- [Key Sequences](https://forum.cockos.com/showthread.php?t=269134)
+- Rename FX Instance
 
 ## MIDI Velocity Compressor
 
