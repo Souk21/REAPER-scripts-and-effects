@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="25844ecee42f7218f7cff1e66b8e9ad2c3d0ff37">
+<index version="1" name="Souk21 ReaPack" commit="a2c423a543a5017b310fad45a076141864cb3d3d">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -65,6 +65,16 @@ Properly escape display names in code generation (replaces " with ')]]></changel
 Change 'Key / chord' to 'Shortcut' to avoid confusion
 Add a way to change font / use default font]]></changelog>
         <source main="main">https://github.com/Souk21/REAPER-scripts-and-effects/raw/25844ecee42f7218f7cff1e66b8e9ad2c3d0ff37/Scripts/Key%20Sequences.lua</source>
+      </version>
+      <version name="1.3" author="Souk21" time="2022-07-30T11:59:06Z">
+        <changelog><![CDATA[Reorder actions
+Edit display name
+Option to keep sequence open after action
+Button to remove sequence shortcut
+Fix some special characters issues, add others
+Press Enter to validate new sequence / action edit
+Change 'Key / chord' to 'Key(s)' in popup to avoid confusion]]></changelog>
+        <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/a2c423a543a5017b310fad45a076141864cb3d3d/Scripts/Key%20Sequences.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
