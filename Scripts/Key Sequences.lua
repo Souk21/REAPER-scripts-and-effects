@@ -2,11 +2,16 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Add confirmation to remove sequence
---   Change 'Key / chord' to 'Shortcut' to avoid confusion
---   Add a way to change font / use default font
---@version 1.2
-
+--   Reorder actions
+--   Edit display name
+--   Option to keep sequence open after action
+--   Button to remove sequence shortcut
+--   Fix some special characters issues, add others
+--   Press Enter to validate new sequence / action edit
+--   Change 'Key / chord' to 'Key(s)' in popup to avoid confusion
+--@version 1.3
+--@provides
+--   [main] . > souk21_Key Sequences.lua
 local font_name = "Verdana"
 
 if reaper.CF_GetCommandText == nil or reaper.ImGui_Begin == nil or reaper.JS_Window_Find == nil then
@@ -40,7 +45,10 @@ local dirty = {}
 local cur_file_idx = 0
 local selected_section = 1
 local new_seq_name = ""
+local new_display_name = ""
+local new_exit = false
 local new_wants_focus = false
+local edit_wants_focus = false
 local table_scroll = 0
 local first_load = true
 local last_dirty_name = ""
@@ -113,6 +121,44 @@ function Button(txt, wIn, hIn)
     reaper.ImGui_DrawList_AddLine(draw_list, x, y, x + w, y, 0xffffff15, 1)
     reaper.ImGui_PopStyleVar(ctx, 2)
     reaper.ImGui_PopStyleColor(ctx)
+    return ret
+end
+
+function ArrowButton(wIn, hIn, up, disabled)
+    local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+    local btn_name = "##up"
+    if not up then btn_name = "##down" end
+    local ret = Button(btn_name, wIn, hIn)
+    local color = 0xffffffcc
+    if disabled then
+        color = 0xffffff33
+    end
+    x = x + 15
+    if up then
+        y = y + 14
+        reaper.ImGui_DrawList_AddTriangleFilled(draw_list, x, y, x - 10, y, x - 5, y - 8, color)
+    else
+        y = y + 6
+        reaper.ImGui_DrawList_AddTriangleFilled(draw_list, x, y, x - 5, y + 8, x - 10, y, color)
+    end
+    return ret
+end
+
+function DeleteButton(name, wIn, hIn)
+    if wIn == nil then
+        wIn = 20
+    end
+    if hIn == nil then
+        hIn = 20
+    end
+    local ret = Button(name, wIn, hIn)
+    local w = reaper.ImGui_GetItemRectSize(ctx)
+    local x, y = reaper.ImGui_GetItemRectMin(ctx)
+    x = x + w / 2
+    y = y + w / 2
+    local size = 4
+    reaper.ImGui_DrawList_AddLine(draw_list, x - size, y - size, x + size, y + size, 0xffffffcc, 2)
+    reaper.ImGui_DrawList_AddLine(draw_list, x - size, y + size, x + size, y - size, 0xffffffcc, 2)
     return ret
 end
 
@@ -228,7 +274,7 @@ function KeyPopup(id, own_index)
             reaper.ImGui_CloseCurrentPopup(ctx)
             key_popup_opened = false
         end
-        local text = "Press a key / chord"
+        local text = "Press key(s)"
         local text_size = reaper.ImGui_CalcTextSize(ctx, text)
         local avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
         MoveCursor(avail_x / 2 - text_size / 2, 0)
@@ -290,21 +336,21 @@ function ToChar(int, cap)
     end
 
     local keys = {
-        [27] = "ESC",
-        [32] = "SPACE",
-        [8] = "BCKSPACE",
-        [9] = "TAB",
-        [1752132965] = "HOME",
-        [6647396] = "END",
-        [1885824110] = "PGDWN",
-        [1885828464] = "PGUP",
-        [6909555] = "INS",
-        [6579564] = "DEL",
-        [13] = "RET",
-        [30064] = "UP",
-        [1685026670] = "DOWN",
-        [1818584692] = "LEFT",
-        [1919379572] = "RIGHT",
+        [27] = "Esc",
+        [32] = "Space",
+        [8] = "BckSpace",
+        [9] = "Tab",
+        [1752132965] = "Home",
+        [6647396] = "End",
+        [1885824110] = "PgDwn",
+        [1885828464] = "PgUp",
+        [6909555] = "Ins",
+        [6579564] = "Del",
+        [13] = "Ret",
+        [30064] = "Up",
+        [1685026670] = "Down",
+        [1818584692] = "Left",
+        [1919379572] = "Right",
         [26161] = "F1",
         [26162] = "F2",
         [26163] = "F3",
@@ -325,19 +371,19 @@ function ToChar(int, cap)
     ctrl = cap & 32 == 32
     if (cmd or ctrl) and int >= 1 and int <= 26 then
         int = int + 96 - 32
-        return mods(false) .. string.char(int)
+        return mods(false) .. utf8.char(int)
     elseif cmd and alt and int >= 257 and int <= 282 then
         int = int - 160 - 32
-        return mods(false) .. string.char(int)
+        return mods(false) .. utf8.char(int)
     elseif alt and int >= 321 and int <= 346 then
         int = int - 256
-        return mods(false) .. string.char(int)
+        return mods(false) .. utf8.char(int)
     elseif keys[int] ~= nil then
         return mods(false) .. keys[int]
     elseif int >= 33 and int <= 255 then
-        return mods(true) .. string.char(int)
+        return mods(true) .. utf8.char(int)
     else
-        return tostring(int)
+        return mods(false) .. utf8.char(int)
     end
 end
 
@@ -403,12 +449,19 @@ function Load()
             file.section = sectionId(section_str)
             local pat = "if char == (%d+) and shift == (%S+) and cmd == (%S+) and ctrl == (%S+) and alt == (%S+) then%s*"
             pat = pat .. commandPat(section_str)
+            pat = pat .. "%s*exit = (%S+)"
+            local names_pat = 'gfx.drawstr%("%[.-%] (.-)"%)'
+            local names = {}
+            for name in string.gmatch(txt, names_pat) do
+                table.insert(names, name)
+            end
             file.actions = {}
-            for key_id, shift, cmd, ctrl, alt, action_id in string.gmatch(txt, pat) do
+            for key_id, shift, cmd, ctrl, alt, action_id, exit in string.gmatch(txt, pat) do
                 shift = ToBool(shift)
                 cmd = ToBool(cmd)
                 ctrl = ToBool(ctrl)
                 alt = ToBool(alt)
+                exit = ToBool(exit)
                 local new = {
                     key = key_id,
                     action = action_id,
@@ -416,8 +469,10 @@ function Load()
                     cmd = cmd,
                     ctrl = ctrl,
                     alt = alt,
+                    exit = exit,
                     key_text = ToChar(tonumber(key_id), ToCap(shift, cmd, ctrl, alt)),
-                    action_text = reaper.CF_GetCommandText(sections[file.section].id, action_id)
+                    action_text = reaper.CF_GetCommandText(sections[file.section].id, action_id),
+                    display_name = names[#file.actions + 1]
                 }
                 table.insert(file.actions, new)
             end
@@ -463,7 +518,9 @@ function Save()
         for _, action in ipairs(actions) do
             result = result .. cond(action) .. [[ then
       reaper.Main_OnCommand(]] .. tostring(action.action) .. [[,0)
-      exit = true
+      exit = ]] .. tostring(action.exit) .. [[
+
+      time_start = reaper.time_precise()
     elseif ]]
         end
         return result
@@ -474,7 +531,9 @@ function Save()
         for _, action in ipairs(actions) do
             result = result .. cond(action) .. [[ then
       reaper.MIDIEditor_OnCommand(midi_editor,]] .. tostring(action.action) .. [[)
-      exit = true
+      exit = ]] .. tostring(action.exit) .. [[
+
+      time_start = reaper.time_precise()
     elseif ]]
         end
         return result
@@ -485,7 +544,9 @@ function Save()
         for _, action in ipairs(actions) do
             result = result .. cond(action) .. [[ then
       reaper.JS_Window_OnCommand(explorerHWND,]] .. tostring(action.action) .. [[)
-      exit = true
+      exit = ]] .. tostring(action.exit) .. [[
+
+      time_start = reaper.time_precise()
     elseif ]]
         end
         return result
@@ -529,21 +590,11 @@ function Save()
     for _, file in ipairs(dirty) do
         local longest = ""
         for _, action in ipairs(file.actions) do
-            local short_name = action.action_text
-            if string.sub(short_name, 0, #"Custom: ") == "Custom: " then
-                short_name = string.sub(short_name, #"Custom: " + 1)
-            end
-            if string.sub(short_name, 0, #"Script: ") == "Script: " then
-                short_name = string.sub(short_name, #"Script: " + 1)
-            end
-            if string.sub(short_name, #short_name - 3) == ".lua" or string.sub(short_name, #short_name - 3) == ".eel" then
-                short_name = string.sub(short_name, 0, #short_name - 4)
-            end
-            action.display = string.format("[%s] %s", action.key_text, short_name)
+            action.hint = string.format("[%s] %s", action.key_text, action.display_name)
             -- replace " with ' to not break code generation
-            action.display = string.gsub(action.display, '"', "'")
-            if #action.display > #longest then
-                longest = action.display
+            action.hint = string.gsub(action.hint, '"', "'")
+            if #action.hint > #longest then
+                longest = action.hint
             end
         end
         local window_name = "KeySequenceListener" .. file.name
@@ -582,7 +633,7 @@ function Save()
       gfx.y = margin
     ]]
         for _, action in ipairs(file.actions) do
-            result = string.format('%s  gfx.drawstr("%s")\n', result, action.display)
+            result = string.format('%s  gfx.drawstr("%s")\n', result, action.hint)
             result = result .. [[
       gfx.y = gfx.y + gfx.texth
       gfx.x = margin
@@ -700,7 +751,7 @@ function Frame()
             reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 10, 8)
             if reaper.ImGui_BeginPopupModal(ctx, "New Sequence", nil, popup_flags) then
                 MoveCursor(0, 15)
-                reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.5)
+                reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.7)
                 reaper.ImGui_Text(ctx, "Name")
                 reaper.ImGui_PopStyleVar(ctx)
                 reaper.ImGui_SameLine(ctx)
@@ -712,7 +763,7 @@ function Frame()
                 reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBg(), 0x333333ff)
                 _, new_seq_name = reaper.ImGui_InputText(ctx, "##", new_seq_name)
                 MoveCursor(0, 15)
-                reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.5)
+                reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.7)
                 reaper.ImGui_Text(ctx, "Section")
                 reaper.ImGui_PopStyleVar(ctx)
                 reaper.ImGui_SameLine(ctx)
@@ -738,7 +789,9 @@ function Frame()
                 if #new_seq_name == 0 then
                     reaper.ImGui_BeginDisabled(ctx, true)
                 end
-                if Button("Ok", -FLT_MIN) then
+                local enter_pressed = reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_KeypadEnter())
+                enter_pressed = enter_pressed or reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Enter())
+                if Button("Ok", -FLT_MIN) or (#new_seq_name ~= 0 and enter_pressed) then
                     new_seq_name = ValidateName(new_seq_name)
                     local new = { name = new_seq_name, actions = {}, section = selected_section, show_after = 1.0 }
                     table.insert(files, new)
@@ -788,21 +841,23 @@ function Frame()
             end
             reaper.ImGui_SameLine(ctx)
             avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
-            MoveCursor(avail_x - 186, -3)
+            MoveCursor(avail_x - 190, -3)
             if files[cur_file_idx].command_id ~= nil then
-                local ret_desc, shortcut = reaper.JS_Actions_GetShortcutDesc(sections[files[cur_file_idx].section].id,
-                    files[cur_file_idx].command_id, 0)
+                local section_id = sections[files[cur_file_idx].section].id
+                local command_id = files[cur_file_idx].command_id
+                local ret_desc, shortcut = reaper.JS_Actions_GetShortcutDesc(section_id, command_id, 0)
                 if ret_desc then
-                    if Button(shortcut, 180) then
-                        reaper.JS_Actions_DoShortcutDialog(sections[files[cur_file_idx].section].id,
-                            files[cur_file_idx].command_id,
-                            0)
+                    if Button(shortcut, 160) then
+                        reaper.JS_Actions_DoShortcutDialog(section_id, command_id, 0)
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    MoveCursor(-3, -3)
+                    if DeleteButton("##deleteShortcut") then
+                        reaper.JS_Actions_DeleteShortcut(section_id, command_id, 0)
                     end
                 else
                     if Button("Set sequence shortcut", 180) then
-                        reaper.JS_Actions_DoShortcutDialog(sections[files[cur_file_idx].section].id,
-                            files[cur_file_idx].command_id,
-                            0)
+                        reaper.JS_Actions_DoShortcutDialog(section_id, command_id, 0)
                     end
                 end
             end
@@ -818,14 +873,14 @@ function Frame()
                 padding_table = 7
             end
 
-            local table_h = math.min(avail_y - 36, action_count * 31 + header_h + padding_table)
+            local table_h = math.min(avail_y - 36, action_count * 30 + header_h + padding_table)
             local table_flags = reaper.ImGui_TableFlags_RowBg() | reaper.ImGui_TableFlags_ScrollY()
             local has_actions = #files[cur_file_idx].actions > 0
             if has_actions and reaper.ImGui_BeginTable(ctx, "table", 3, table_flags, avail_x, table_h) then
                 reaper.ImGui_DrawList_AddRectFilled(draw_list, x, y, x + avail_x, y + table_h, 0xffffff14, 3, rect_flags)
                 reaper.ImGui_DrawList_AddRectFilled(draw_list, x, y, x + avail_x, y + header_h, header_col, 3, rect_flags)
                 table_scroll = reaper.ImGui_GetScrollY(ctx)
-                reaper.ImGui_TableSetupColumn(ctx, "", reaper.ImGui_TableColumnFlags_WidthFixed(), 25)
+                reaper.ImGui_TableSetupColumn(ctx, "", reaper.ImGui_TableColumnFlags_WidthFixed(), 75)
                 reaper.ImGui_TableSetupColumn(ctx, " Key", reaper.ImGui_TableColumnFlags_WidthFixed(), 160)
                 reaper.ImGui_TableSetupColumn(ctx, " Action", reaper.ImGui_TableColumnFlags_WidthStretch())
                 reaper.ImGui_TableNextRow(ctx)
@@ -843,12 +898,39 @@ function Frame()
                     reaper.ImGui_SetCursorPosY(ctx, reaper.ImGui_GetCursorPosY(ctx))
                 end
                 reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 6, 4)
-                for i, action in ipairs(files[cur_file_idx].actions) do
+                local cur_file_actions = files[cur_file_idx].actions
+                for i, action in ipairs(cur_file_actions) do
                     reaper.ImGui_PushID(ctx, tostring(i))
                     reaper.ImGui_TableNextRow(ctx)
                     reaper.ImGui_TableNextColumn(ctx)
                     MoveCursor(6, 0)
-                    if Button("x", -FLT_MIN) then
+                    local up_disabled = i == 1
+                    local down_disabled = i == #files[cur_file_idx].actions
+                    if down_disabled then
+                        reaper.ImGui_BeginDisabled(ctx)
+                    end
+                    if ArrowButton(20, 20, false, down_disabled) then
+                        cur_file_actions[i], cur_file_actions[i + 1] = cur_file_actions[i + 1], cur_file_actions[i]
+                        SetDirty(files[cur_file_idx])
+                    end
+                    if down_disabled then
+                        reaper.ImGui_EndDisabled(ctx)
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    MoveCursor(-3, 0)
+                    if up_disabled then
+                        reaper.ImGui_BeginDisabled(ctx)
+                    end
+                    if ArrowButton(20, 20, true, up_disabled) then
+                        cur_file_actions[i - 1], cur_file_actions[i] = cur_file_actions[i], cur_file_actions[i - 1]
+                        SetDirty(files[cur_file_idx])
+                    end
+                    if up_disabled then
+                        reaper.ImGui_EndDisabled(ctx)
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    MoveCursor(-3, 0)
+                    if DeleteButton("##deleteAction") then
                         table.remove(files[cur_file_idx].actions, i)
                         SetDirty(files[cur_file_idx])
                     end
@@ -875,11 +957,97 @@ function Frame()
 
                     reaper.ImGui_TableNextColumn(ctx)
                     reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ButtonTextAlign(), 0, 0.5)
-                    if Button("  " .. action.action_text, -6) then
-                        action_popup_requested = true
-                        waiting_for_action = cur_file_idx
+                    local btn_text = action.display_name
+                    if not action.exit then
+                        btn_text = "  " .. btn_text
+                    end
+                    if action.display_name ~= action.action_text then
+                        btn_text = btn_text .. " (" .. action.action_text .. ")"
+                    end
+                    if Button("  " .. btn_text, -6) then
+                        new_display_name = action.display_name
+                        new_exit = action.exit
+                        edit_wants_focus = true
+                        reaper.ImGui_OpenPopup(ctx, "Edit action##" .. tostring(i))
+                    end
+                    if not action.exit then
+                        local x, y = reaper.ImGui_GetItemRectMin(ctx)
+                        reaper.ImGui_DrawList_AddCircleFilled(draw_list, x + 9, y + 10, 3, 0xffffffaa, 10)
                     end
                     reaper.ImGui_PopStyleVar(ctx)
+
+                    reaper.ImGui_SetNextWindowPos(ctx, center[1], center[2], reaper.ImGui_Cond_Appearing(), 0.5, 0.5)
+                    reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_WindowPadding(), 10, 10)
+                    reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 10, 8)
+                    if reaper.ImGui_BeginPopupModal(ctx, "Edit action##" .. tostring(i), nil, popup_flags) then
+                        reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBg(), 0x444444ff)
+                        reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.7)
+                        MoveCursor(3, 16)
+                        reaper.ImGui_Text(ctx, "Display Name")
+                        reaper.ImGui_PopStyleVar(ctx)
+                        reaper.ImGui_SameLine(ctx)
+                        MoveCursor(6, -6)
+                        if edit_wants_focus then
+                            reaper.ImGui_SetKeyboardFocusHere(ctx)
+                            edit_wants_focus = false
+                        end
+                        reaper.ImGui_PushItemWidth(ctx, 300)
+                        _, new_display_name = reaper.ImGui_InputText(ctx, "##actionname", new_display_name)
+                        reaper.ImGui_PopItemWidth(ctx)
+                        reaper.ImGui_SameLine(ctx)
+                        MoveCursor(-2, -6)
+                        local default_name_disabled = new_display_name == action.action_text
+                        if default_name_disabled then
+                            reaper.ImGui_BeginDisabled(ctx)
+                        end
+                        if DeleteButton("##defaultname", 29, 29) then
+                            new_display_name = action.action_text
+                        end
+                        if default_name_disabled then
+                            reaper.ImGui_EndDisabled(ctx)
+                        end
+                        reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.7)
+                        MoveCursor(3, 0)
+                        reaper.ImGui_Text(ctx, "Keep Open")
+                        reaper.ImGui_PopStyleVar(ctx)
+                        reaper.ImGui_SameLine(ctx)
+                        MoveCursor(21, -6)
+                        _, new_exit = reaper.ImGui_Checkbox(ctx, "##keepopen", not new_exit)
+                        MoveCursor(0, 10)
+                        new_exit = not new_exit
+                        if Button("Change Action", -FLT_MIN, 30) then
+                            if new_display_name == "" then
+                                new_display_name = action.action_text
+                            end
+                            action.display_name = new_display_name
+                            action.exit = new_exit
+                            SetDirty(files[cur_file_idx])
+                            reaper.ImGui_CloseCurrentPopup(ctx)
+                            action_popup_requested = true
+                            waiting_for_action = i
+                        end
+                        reaper.ImGui_PopStyleColor(ctx)
+                        MoveCursor(0, 6)
+                        local avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
+                        if Button("Cancel##edit", avail_x / 2.1) then
+                            reaper.ImGui_CloseCurrentPopup(ctx)
+                        end
+                        reaper.ImGui_SameLine(ctx)
+                        local enter_pressed = reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_KeypadEnter())
+                        enter_pressed = enter_pressed or reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Enter())
+                        if Button("Ok##edit", -FLT_MIN) or enter_pressed then
+                            if new_display_name == "" then
+                                new_display_name = action.action_text
+                            end
+                            action.display_name = new_display_name
+                            action.exit = new_exit
+                            SetDirty(files[cur_file_idx])
+                            reaper.ImGui_CloseCurrentPopup(ctx)
+                        end
+                        reaper.ImGui_EndPopup(ctx)
+                    end
+                    reaper.ImGui_PopStyleVar(ctx, 2)
+
                     if waiting_for_action == i then
                         local ret, new_action, new_action_text = ActionPopup(tostring(i),
                             sections[files[cur_file_idx].section].id)
@@ -899,11 +1067,11 @@ function Frame()
             end
             MoveCursor(0, 6)
             if Button("Add Shortcut", -FLT_MIN, 25) then
-                adding = { key_text = "...", action_text = "...", action = -1, key = -1 }
+                adding = { key_text = "...", action_text = "...", action = -1, key = -1, exit = true,
+                    display_name = "..." }
                 key_popup_requested = true
                 waiting_for_key = 0
             end
-            MoveCursor(6, 0)
             if waiting_for_key == 0 then
                 local ret, key, key_text, cmd, shift, alt, ctrl = KeyPopup("##new")
                 if ret == nil then
@@ -927,6 +1095,7 @@ function Frame()
                 elseif ret then
                     adding.action = action
                     adding.action_text = action_text
+                    adding.display_name = action_text
                     table.insert(files[cur_file_idx].actions, adding)
                     SetDirty(files[cur_file_idx])
                     waiting_for_action = -1
