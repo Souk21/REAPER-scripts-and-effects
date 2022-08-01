@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="da71ac7f172a5896cd6c54f56e20366416dd01c6">
+<index version="1" name="Souk21 ReaPack" commit="f87a154dc8177eb4889fd82d158b072d31e06d8d">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -85,6 +85,10 @@ Internal: Rely on 'metadata' instead of parsing lua code]]></changelog>
       <version name="1.5" author="Souk21" time="2022-08-01T10:44:14Z">
         <changelog><![CDATA[Fix "keep open" for scripts that take focus]]></changelog>
         <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/da71ac7f172a5896cd6c54f56e20366416dd01c6/Scripts/Key%20Sequences.lua</source>
+      </version>
+      <version name="1.6" author="Souk21" time="2022-08-01T12:47:57Z">
+        <changelog><![CDATA[Fix nested sequences]]></changelog>
+        <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/f87a154dc8177eb4889fd82d158b072d31e06d8d/Scripts/Key%20Sequences.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
