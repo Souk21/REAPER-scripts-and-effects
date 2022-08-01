@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="a2c423a543a5017b310fad45a076141864cb3d3d">
+<index version="1" name="Souk21 ReaPack" commit="2dd905ec555a857a0738e3126093a43a141d6b37">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -75,6 +75,12 @@ Fix some special characters issues, add others
 Press Enter to validate new sequence / action edit
 Change 'Key / chord' to 'Key(s)' in popup to avoid confusion]]></changelog>
         <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/a2c423a543a5017b310fad45a076141864cb3d3d/Scripts/Key%20Sequences.lua</source>
+      </version>
+      <version name="1.4" author="Souk21" time="2022-08-01T10:05:51Z">
+        <changelog><![CDATA[Fix sequences getting corrupted
+Internal: Add sequence versioning
+Internal: Rely on 'metadata' instead of parsing lua code]]></changelog>
+        <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/2dd905ec555a857a0738e3126093a43a141d6b37/Scripts/Key%20Sequences.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
