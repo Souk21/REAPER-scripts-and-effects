@@ -2,10 +2,8 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Fix sequences getting corrupted
---   Internal: Add sequence versioning
---   Internal: Rely on 'metadata' instead of parsing lua code
---@version 1.4
+--   Fix "keep open" for scripts that take focus
+--@version 1.5
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 local font_name = "Verdana"
@@ -636,6 +634,7 @@ function Save()
             else
                 reaper.ShowMessageBox("Unknown section")
             end
+            result = result .. "\n      reaper.JS_Window_SetFocus(hwnd)"
             result = result .. "\n      exit = " .. tostring(action.exit)
             result = result .. "\n      time_start = reaper.time_precise()\n    elseif "
         end
