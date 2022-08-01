@@ -2,14 +2,10 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Reorder actions
---   Edit display name
---   Option to keep sequence open after action
---   Button to remove sequence shortcut
---   Fix some special characters issues, add others
---   Press Enter to validate new sequence / action edit
---   Change 'Key / chord' to 'Key(s)' in popup to avoid confusion
---@version 1.3
+--   Fix sequences getting corrupted
+--   Internal: Add sequence versioning
+--   Internal: Rely on 'metadata' instead of parsing lua code
+--@version 1.4
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 local font_name = "Verdana"
@@ -198,10 +194,24 @@ function ValidateName(name)
     return name
 end
 
+function ActionInfo(int_id, section_id)
+    local native, stable_id, command_text
+    command_text = reaper.CF_GetCommandText(section_id, int_id)
+    local lookup = reaper.ReverseNamedCommandLookup(int_id)
+    if lookup == nil then
+        native = true
+        stable_id = int_id
+    else
+        native = false
+        stable_id = "_" .. lookup
+    end
+    return stable_id, native, command_text
+end
+
 --returns nil if not opened / canceled, false if waiting for action, true if got action
 function ActionPopup(id, section_id)
     local popup_name = "Action##" .. id
-    local action, action_text
+    local action, action_text, native
     if action_popup_requested then
         action_popup_requested = false
         action_popup_opened = true
@@ -214,8 +224,7 @@ function ActionPopup(id, section_id)
     if reaper.ImGui_BeginPopupModal(ctx, popup_name, nil, popup_flags) then
         local ret = reaper.PromptForAction(0, 0, section_id)
         if ret > 0 then
-            action = ret
-            action_text = reaper.CF_GetCommandText(section_id, ret)
+            action, native, action_text = ActionInfo(ret, section_id)
             got_action = true
             action_popup_opened = false
             reaper.ImGui_CloseCurrentPopup(ctx)
@@ -230,7 +239,7 @@ function ActionPopup(id, section_id)
             got_action = nil
         end
         reaper.ImGui_EndPopup(ctx)
-        return got_action, action, action_text
+        return got_action, action, native, action_text
     end
 end
 
@@ -405,7 +414,7 @@ function ToCap(shift, cmd, ctrl, alt)
     return ret
 end
 
-function Load()
+function Parse_V0(file, txt)
     local function sectionId(section_str)
         if section_str == "MAIN" then return 1
         elseif section_str == "MALT" then return 2
@@ -422,6 +431,102 @@ function Load()
         elseif section_str == "MEXP" then return "reaper%.JS_Window_OnCommand%(explorerHWND,(%d+)%)" end
     end
 
+    local section_pat = "--SEC:(%w%w%w%w)"
+    local section_str = string.match(txt, section_pat)
+    file.section = sectionId(section_str)
+    local pat = "if char == (%d+) and shift == (%S+) and cmd == (%S+) and ctrl == (%S+) and alt == (%S+) then%s*"
+    pat = pat .. commandPat(section_str)
+    pat = pat .. "%s*exit = (%S+)"
+    local names_pat = 'gfx.drawstr%("%[.-%] (.-)"%)'
+    local names = {}
+    for name in string.gmatch(txt, names_pat) do
+        table.insert(names, name)
+    end
+    file.actions = {}
+    for key_id, shift, cmd, ctrl, alt, action_id, exit in string.gmatch(txt, pat) do
+        shift = ToBool(shift)
+        cmd = ToBool(cmd)
+        ctrl = ToBool(ctrl)
+        alt = ToBool(alt)
+        exit = ToBool(exit)
+        action_id = tonumber(action_id)
+        local id, native, command_text = ActionInfo(action_id, sections[file.section].id)
+        local new = {
+            key = key_id,
+            action = id,
+            shift = shift,
+            cmd = cmd,
+            ctrl = ctrl,
+            alt = alt,
+            exit = exit,
+            key_text = ToChar(tonumber(key_id), ToCap(shift, cmd, ctrl, alt)),
+            action_text = command_text,
+            display_name = names[#file.actions + 1],
+            native = native
+        }
+        table.insert(file.actions, new)
+    end
+    local show_after_pat = "show_after = (%d%.%d)"
+    file.show_after = string.match(txt, show_after_pat)
+    local path = script_path .. file.path
+    -- get command id by adding it
+    -- not efficient, but it feels overkill to include a SHA1 library just to compute the command id
+    file.command_id = reaper.AddRemoveReaScript(true, sections[file.section].id, path, true)
+end
+
+function Parse_V1(file, txt)
+    local function sectionId(section_str)
+        if section_str == "MAIN" then return 1
+        elseif section_str == "MALT" then return 2
+        elseif section_str == "MIDI" then return 3
+        elseif section_str == "EVNT" then return 4
+        elseif section_str == "MEXP" then return 5 end
+    end
+
+    file.actions = {}
+    local section_pat = "--SEC:(%w%w%w%w)"
+    local section_str = string.match(txt, section_pat)
+    file.section = sectionId(section_str)
+    local metadata_pat = "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+)%s+NATIVE (%S+)%s+ID (%S+)%s+EXIT (%S+)%s+DISPLAY ([^\n]+)"
+    for key, shift, cmd, alt, ctrl, native, id, exit, display in string.gmatch(txt, metadata_pat) do
+        key = tonumber(key)
+        shift = ToBool(shift)
+        cmd = ToBool(cmd)
+        alt = ToBool(alt)
+        ctrl = ToBool(ctrl)
+        native = ToBool(native)
+        exit = ToBool(exit)
+        local int_id
+        if native then
+            id = tonumber(id)
+            int_id = id
+        else
+            int_id = reaper.NamedCommandLookup(id)
+        end
+        local action_text = reaper.CF_GetCommandText(sections[file.section].id, int_id)
+        table.insert(file.actions, {
+            key = key,
+            action = id,
+            shift = shift,
+            cmd = cmd,
+            alt = alt,
+            ctrl = ctrl,
+            exit = exit,
+            display_name = display,
+            action_text = action_text,
+            native = native,
+            key_text = ToChar(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
+        })
+    end
+    local show_after_pat = "show_after = (%d%.%d)"
+    file.show_after = string.match(txt, show_after_pat)
+    local path = script_path .. file.path
+    -- get command id by adding it
+    -- not efficient, but it feels overkill to include a SHA1 library just to compute the command id
+    file.command_id = reaper.AddRemoveReaScript(true, sections[file.section].id, path, true)
+end
+
+function Load()
     dirty = {}
     files = {}
     -- create directory if it doesn't exist
@@ -437,6 +542,7 @@ function Load()
         end
         index = index + 1
     end
+    local needs_post_upgrade_save = false
     for _, file in ipairs(files) do
         local file_io, err = io.open(script_path .. file.path, 'r')
         if file_io == nil then
@@ -444,45 +550,27 @@ function Load()
         else
             local txt = file_io:read("*all")
             file_io:close()
-            local section_pat = "--SEC:(%w%w%w%w)"
-            local section_str = string.match(txt, section_pat)
-            file.section = sectionId(section_str)
-            local pat = "if char == (%d+) and shift == (%S+) and cmd == (%S+) and ctrl == (%S+) and alt == (%S+) then%s*"
-            pat = pat .. commandPat(section_str)
-            pat = pat .. "%s*exit = (%S+)"
-            local names_pat = 'gfx.drawstr%("%[.-%] (.-)"%)'
-            local names = {}
-            for name in string.gmatch(txt, names_pat) do
-                table.insert(names, name)
+            local version_pat = "-- VER:(%d+)"
+            local version = string.match(txt, version_pat)
+            if version == nil then
+                version = 0
+            else
+                version = tonumber(version)
             end
-            file.actions = {}
-            for key_id, shift, cmd, ctrl, alt, action_id, exit in string.gmatch(txt, pat) do
-                shift = ToBool(shift)
-                cmd = ToBool(cmd)
-                ctrl = ToBool(ctrl)
-                alt = ToBool(alt)
-                exit = ToBool(exit)
-                local new = {
-                    key = key_id,
-                    action = action_id,
-                    shift = shift,
-                    cmd = cmd,
-                    ctrl = ctrl,
-                    alt = alt,
-                    exit = exit,
-                    key_text = ToChar(tonumber(key_id), ToCap(shift, cmd, ctrl, alt)),
-                    action_text = reaper.CF_GetCommandText(sections[file.section].id, action_id),
-                    display_name = names[#file.actions + 1]
-                }
-                table.insert(file.actions, new)
+            if version == 0 then
+                Parse_V0(file, txt)
+                SetDirty(file)
+                needs_post_upgrade_save = true
+            elseif version == 1 then
+                Parse_V1(file, txt)
             end
-            local show_after_pat = "show_after = (%d%.%d)"
-            file.show_after = string.match(txt, show_after_pat)
-            local path = script_path .. file.path
-            -- get command id by adding it
-            -- not efficient, but it feels overkill to include a SHA1 library just to compute the command id
-            file.command_id = reaper.AddRemoveReaScript(true, sections[file.section].id, path, true)
+
+
         end
+    end
+    if needs_post_upgrade_save then
+        Save()
+        Load()
     end
     if first_load and #files > 0 then
         cur_file_idx = 1
@@ -500,6 +588,22 @@ function Load()
 end
 
 function Save()
+    local function metadata(file)
+        local ret = "\n--[["
+        for _, action in ipairs(file.actions) do
+            ret = ret .. "\nKEY " .. math.floor(action.key) ..
+                " SHIFT " .. tostring(action.shift) ..
+                " CMD " .. tostring(action.cmd) ..
+                " ALT " .. tostring(action.alt) ..
+                " CTRL " .. tostring(action.ctrl) ..
+                "\nNATIVE " .. tostring(action.native) ..
+                "\nID " .. action.action ..
+                "\nEXIT " .. tostring(action.exit) ..
+                "\nDISPLAY " .. action.display_name
+        end
+        return ret .. "\n]]--"
+    end
+
     local function cond(action)
         return "char == " ..
             math.floor(action.key) ..
@@ -513,56 +617,29 @@ function Save()
             tostring(action.alt)
     end
 
-    local function mainCommands(actions)
+    local function commands(section, file)
         local result = ""
-        for _, action in ipairs(actions) do
-            result = result .. cond(action) .. [[ then
-      reaper.Main_OnCommand(]] .. tostring(action.action) .. [[,0)
-      exit = ]] .. tostring(action.exit) .. [[
-
-      time_start = reaper.time_precise()
-    elseif ]]
+        for _, action in ipairs(file.actions) do
+            local command_str = ""
+            if action.native then
+                command_str = tostring(action.action)
+            else
+                command_str = "reaper.NamedCommandLookup('" .. action.action .. "')"
+            end
+            result = result .. cond(action) .. " then\n"
+            if section.name == "Main" or section.name == "Main (alt recording)" then
+                result = result .. "      reaper.Main_OnCommand(" .. command_str .. ",0)"
+            elseif section.name == "MIDI Editor" or section.name == "MIDI Event List Editor" then
+                result = result .. "      reaper.MIDIEditor_OnCommand(midi_editor, " .. command_str .. ")"
+            elseif section.name == "Media Explorer" then
+                result = result .. "      reaper.JS_Window_OnCommand(explorerHWND, " .. command_str .. ")"
+            else
+                reaper.ShowMessageBox("Unknown section")
+            end
+            result = result .. "\n      exit = " .. tostring(action.exit)
+            result = result .. "\n      time_start = reaper.time_precise()\n    elseif "
         end
         return result
-    end
-
-    local function midiEditorCommands(actions)
-        local result = ""
-        for _, action in ipairs(actions) do
-            result = result .. cond(action) .. [[ then
-      reaper.MIDIEditor_OnCommand(midi_editor,]] .. tostring(action.action) .. [[)
-      exit = ]] .. tostring(action.exit) .. [[
-
-      time_start = reaper.time_precise()
-    elseif ]]
-        end
-        return result
-    end
-
-    local function mediaExplorerCommands(actions)
-        local result = ""
-        for _, action in ipairs(actions) do
-            result = result .. cond(action) .. [[ then
-      reaper.JS_Window_OnCommand(explorerHWND,]] .. tostring(action.action) .. [[)
-      exit = ]] .. tostring(action.exit) .. [[
-
-      time_start = reaper.time_precise()
-    elseif ]]
-        end
-        return result
-    end
-
-    local function commands(file)
-        local section = sections[file.section]
-        if section.name == "Main" or section.name == "Main (alt recording)" then
-            return mainCommands(file.actions)
-        elseif section.name == "MIDI Editor" or section.name == "MIDI Event List Editor" then
-            return midiEditorCommands(file.actions)
-        elseif section.name == "Media Explorer" then
-            return mediaExplorerCommands(file.actions)
-        else
-            return ""
-        end
     end
 
     local function section_setup(file)
@@ -599,11 +676,14 @@ function Save()
         end
         local window_name = "KeySequenceListener" .. file.name
         local result = [[
-  -- This file is autogenerated, do not modify
+  -- This file is autogenerated, do not modify or move
+  -- VER:1]] .. metadata(file) .. [[
+
   if reaper.JS_Window_Find == nil then
     reaper.ShowMessageBox("This script requires js_ReaScriptAPI", "Missing dependency", 0)
     return
   end
+
   show_after = ]] .. string.format("%.1f", file.show_after) .. [[
   
   time_start = reaper.time_precise()
@@ -646,8 +726,8 @@ function Save()
     alt = cap & 16 == 16
     ctrl = cap & 32 == 32
     char = gfx.getchar()
-    -- 'var == true' does smell, but it's easier to parse
-    if ]] .. commands(file) .. [[ char > 0 then exit = true end
+    -- 'var == true' does smell, but it's easier to generate
+    if ]] .. commands(sections[file.section], file) .. [[ char > 0 then exit = true end
     --stop on unfocus
     if reaper.JS_Window_GetFocus() ~= hwnd then exit = true end
     if exit then gfx.quit() return end
@@ -1049,13 +1129,14 @@ function Frame()
                     reaper.ImGui_PopStyleVar(ctx, 2)
 
                     if waiting_for_action == i then
-                        local ret, new_action, new_action_text = ActionPopup(tostring(i),
+                        local ret, new_action, native, new_action_text = ActionPopup(tostring(i),
                             sections[files[cur_file_idx].section].id)
                         if ret == nil then
                             waiting_for_action = -1
                         elseif ret then
                             action.action = new_action
                             action.action_text = new_action_text
+                            action.native = native
                             SetDirty(files[cur_file_idx])
                             waiting_for_action = -1
                         end
@@ -1089,13 +1170,14 @@ function Frame()
                 end
             end
             if waiting_for_action == 0 then
-                local ret, action, action_text = ActionPopup("new", sections[files[cur_file_idx].section].id)
+                local ret, action, native, action_text = ActionPopup("new", sections[files[cur_file_idx].section].id)
                 if ret == nil then
                     waiting_for_action = -1
                 elseif ret then
                     adding.action = action
                     adding.action_text = action_text
                     adding.display_name = action_text
+                    adding.native = native
                     table.insert(files[cur_file_idx].actions, adding)
                     SetDirty(files[cur_file_idx])
                     waiting_for_action = -1
