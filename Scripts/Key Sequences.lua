@@ -2,12 +2,19 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Fix nested sequences
---@version 1.6
+--   Retina Support
+--   Style Editor (with preview)
+--   Text/Separator entries
+--   Hints are clickable
+--   Hints flash when clicked or shortcut is pressed
+--   Screen border detection
+--   Fixed bug with naming duplicate sequences
+--   Fixed changing action keeping previous action name as display text
+--@version 2.0beta1
 --@provides
 --   [main] . > souk21_Key Sequences.lua
-local font_name = "Verdana"
 
+local font_name = "Verdana"
 if reaper.CF_GetCommandText == nil or reaper.ImGui_Begin == nil or reaper.JS_Window_Find == nil then
     reaper.ShowMessageBox("This script requires SWS, ReaImGui and js_ReaScriptAPI.", "Missing dependency", 0)
     return
@@ -15,8 +22,9 @@ end
 
 local script_path = reaper.GetResourcePath() .. "/Scripts/Souk21_sequences/"
 local prefix = "souk21_sequences_"
-local window_title = "Key Sequences"
-local ctx = reaper.ImGui_CreateContext(window_title)
+local imgui_window_name = "Key Sequences"
+local default_style_filename = "defaultStyle.data"
+local ctx = reaper.ImGui_CreateContext(imgui_window_name)
 local draw_list
 local font
 if font_name ~= nil then
@@ -40,6 +48,7 @@ local cur_file_idx = 0
 local selected_section = 1
 local new_seq_name = ""
 local new_display_name = ""
+local new_text = ""
 local new_exit = false
 local new_wants_focus = false
 local edit_wants_focus = false
@@ -52,6 +61,45 @@ local key_popup_opened = false
 local did_change_show_after = false
 local key_hwnd
 local center
+local preview_opened = false
+local default_style = {
+    background_color = 0x000000,
+    foreground_color = 0xffffff,
+    flash_color = 0xff5555,
+    hover_color = 0xffaaaa,
+    font = "Verdana",
+    font_size = 13,
+    padding = 20,
+    desc_offset = 20,
+    line_offset = 5,
+    pos_mode = 0, --0 follow mouse, 1 fixed position
+    size_mode = 0, --0 auto, 1 fixed size
+    mouse_h_align = 0, --0 left, 1 middle, 2 right
+    mouse_v_align = 0, --0 bottom, 1 middle, 2 top
+    first_frame = true, --set to false by UI() after first frame
+    shown = false,
+}
+local copied_style
+local current_style = nil
+local edit_flags = reaper.ImGui_WindowFlags_AlwaysAutoResize()
+local edit_frame_count = -1
+local style_help_text = {
+    ["None"] = "Press P to open/close preview...",
+    ["PosMode"] = "Mouse: spawn at mouse. Fixed: spawn at a fixed position",
+    ["MousePos"] = "Anchor for hints window",
+    ["FixedPos"] = "Position where hints will spawn",
+    ["SizeMode"] = "Auto: size is computed from layout. Fixed: size is fixed",
+    ["FixedSize"] = "Size of the hints window",
+    ["BG"] = "Background color",
+    ["FG"] = "Text color",
+    ["Flash"] = "Color on key down / click",
+    ["Hover"] = "Color on mouse hover",
+    ["Padding"] = "Space between window borders and text (In fixed size mode: space between top and left border and text)",
+    ["DescOffset"] = "Horizontal space between shortcut key(s) and name",
+    ["LineOffset"] = "Vertical space between lines",
+    ["Font"] = "Font family, unknown font will result in default font being used",
+    ["FontSize"] = "Font size",
+}
 local action_popup_requested = false
 local action_popup_opened = false
 -- -1: not waiting, 0: waiting during new action/key creation, n: waiting during action[n] key/action update/change
@@ -59,6 +107,7 @@ local waiting_for_key = -1
 local waiting_for_action = -1
 local rect_flags = reaper.ImGui_DrawFlags_RoundCornersAll()
 local popup_flags = reaper.ImGui_WindowFlags_NoMove() | reaper.ImGui_WindowFlags_AlwaysAutoResize()
+local main_hwnd = nil
 
 -- global colors/styles
 local colors = {
@@ -96,12 +145,15 @@ local styles = {
     { reaper.ImGui_StyleVar_ChildRounding(), 3 },
 }
 
-function Button(txt, wIn, hIn)
+function Button(txt, wIn, hIn, alpha)
     if hIn == nil then
         hIn = 20
     end
     local ret = false
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(), 0xffffff00)
+    if alpha ~= nil then
+        reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), 0xffffff00 + math.floor(alpha * 255))
+    end
     reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameBorderSize(), 1)
     reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 0, 0)
     if reaper.ImGui_Button(ctx, txt, wIn, hIn) then
@@ -115,6 +167,9 @@ function Button(txt, wIn, hIn)
     reaper.ImGui_DrawList_AddLine(draw_list, x, y, x + w, y, 0xffffff15, 1)
     reaper.ImGui_PopStyleVar(ctx, 2)
     reaper.ImGui_PopStyleColor(ctx)
+    if alpha ~= nil then
+        reaper.ImGui_PopStyleColor(ctx)
+    end
     return ret
 end
 
@@ -156,6 +211,14 @@ function DeleteButton(name, wIn, hIn)
     return ret
 end
 
+function DragDouble(label, value, speed, min, max, format)
+    local ret, new_value = reaper.ImGui_DragDouble(ctx, label, value, speed, min, max, format)
+    if reaper.ImGui_IsItemHovered(ctx) then
+        reaper.ImGui_SetMouseCursor(ctx, reaper.ImGui_MouseCursor_ResizeEW())
+    end
+    return ret, new_value
+end
+
 function ValidateName(name)
     local black_list = "[^%w _%-.]"
     name = string.gsub(name, black_list, "")
@@ -184,17 +247,317 @@ function ValidateName(name)
     if #name == 0 then
         name = "Invalid"
     end
-    for _, file in ipairs(files) do
-        while string.lower(file.name) == string.lower(name) do
-            name = name .. "2"
+    while true do
+        local found_duplicate = false
+        for _, file in ipairs(files) do
+            if string.lower(file.name) == string.lower(name) then
+                found_duplicate = true
+                name = name .. "2"
+            end
+        end
+        if not found_duplicate then
+            break
         end
     end
     return name
 end
 
+function MatchStyle(str)
+    function NilIfEmptyOrNumber(str)
+        if str == "" then return nil end
+        return tonumber(str)
+    end
+
+    -- Using * instead of + for X, Y, W and H so they are optional
+    local style_pat = "STYLE BG (%S+) FG (%S+) FC (%S+) HOVER (%S+) FNTSZ (%S+) PAD (%S+) DESC (%S+) LINE (%S+) POS (%S+) SIZE (%S+) X (%S*) Y (%S*) W (%S*) H (%S*) MH (%S+) MV (%S+) FONT ([^\n]*)"
+    local bg, fg, flash, hover, font_size, padding, desc_offset, line_offset, pos_mode, size_mode, x, y, w, h, mouse_h, mouse_v, font = string
+        .match(str
+            , style_pat)
+    if bg == nil then
+        return nil
+    end
+    x = NilIfEmptyOrNumber(x)
+    y = NilIfEmptyOrNumber(y)
+    w = NilIfEmptyOrNumber(w)
+    h = NilIfEmptyOrNumber(h)
+    return {
+        background_color = tonumber(bg, 16),
+        foreground_color = tonumber(fg, 16),
+        flash_color = tonumber(flash, 16),
+        hover_color = tonumber(hover, 16),
+        font = font,
+        font_size = tonumber(font_size),
+        padding = tonumber(padding),
+        desc_offset = tonumber(desc_offset),
+        line_offset = tonumber(line_offset),
+        pos_mode = tonumber(pos_mode),
+        size_mode = tonumber(size_mode),
+        pos_x = x,
+        pos_y = y,
+        width = w,
+        height = h,
+        mouse_h_align = tonumber(mouse_h),
+        mouse_v_align = tonumber(mouse_v),
+        first_frame = true,
+        shown = false,
+    }
+end
+
+function Sanitize(str)
+    str = string.gsub(str, "\"", "'")
+    str = string.gsub(str, "\\", "")
+    return string.gsub(str, "]]", "")
+end
+
+function UI(actions, layout, shown, window_name)
+    function ToRGB(int)
+        local r = ((int >> 16) & 255) / 255.0
+        local g = ((int >> 8) & 255) / 255.0
+        local b = (int & 255) / 255.0
+        return r, g, b
+    end
+
+    function SetColor(int)
+        local r, g, b = ToRGB(int)
+        gfx.set(r, g, b)
+    end
+
+    if layout.first_frame then
+        --Before doing anything we init window, so gfx_retina is computed, etc
+        --We still have first frame work to do later so we don't set first_frame = false
+        gfx.init(window_name, 0, 0, 0, 0, 0)
+        gfx.ext_retina = 1
+        layout.hwnd = reaper.JS_Window_Find(window_name, true)
+        reaper.JS_Window_SetStyle(layout.hwnd, "POPUP")
+        reaper.JS_Window_SetOpacity(layout.hwnd, "ALPHA", 0)
+        reaper.JS_Window_SetFocus(layout.hwnd)
+    end
+
+    local longest_key = ""
+    local longest_name = ""
+
+    for _, action in ipairs(actions) do
+        if action.text == nil then
+            if #action.key_text > #longest_key then
+                longest_key = action.key_text
+            end
+            if #action.display_name > #longest_name then
+                longest_name = action.display_name
+            end
+        end
+    end
+
+    local os = reaper.GetOS()
+    local is_mac = os == "OSX32" or os == "OSX64" or os == "macOS-arm64"
+    local retina_scale = 1
+    if is_mac then
+        retina_scale = gfx.ext_retina
+    end
+
+    local font_size = layout.font_size * gfx.ext_retina
+    gfx.setfont(1, layout.font, font_size)
+    longest_key = gfx.measurestr(longest_key)
+    longest_name = gfx.measurestr(longest_name)
+
+    local padding = layout.padding * retina_scale
+    local line_offset = layout.line_offset * retina_scale
+    local desc_offset = layout.desc_offset * retina_scale
+    local desc_position = padding + longest_key + desc_offset
+    local height, width
+    if layout.height ~= nil then
+        height = layout.height * retina_scale
+    else
+        height = padding * 2 + #actions * gfx.texth + (#actions - 1) * line_offset
+    end
+    if layout.width ~= nil then
+        width = layout.width * retina_scale
+    else
+        width = desc_position + longest_name + padding
+    end
+
+    -- On Windows and Linux, screen coordinates are relative to *upper* left corner of the primary display, and the positive Y-axis points downward.
+    -- On macOS, screen coordinates are relative to the *bottom* left corner of the primary display, and the positive Y-axis points upward.
+    -- On Windows, windows will appear by default at the bottom right of mouse cursor
+    -- On macOS, windows will appear by default at the top right of mouse cursor
+    if layout.first_frame then
+        layout.first_frame = false
+        layout.flash_time = nil
+        layout.flash_action = nil
+        local x, y = reaper.GetMousePosition()
+        if is_mac then
+            if layout.pos_mode == 0 then
+                --Mouse position
+                local left = x
+                local bot = y
+                local right = x + (width / retina_scale)
+                local top = y + (height / retina_scale)
+                if layout.mouse_h_align == 1 then
+                    left = left - (width / retina_scale) / 2
+                    right = right - (width / retina_scale) / 2
+                elseif layout.mouse_h_align == 2 then
+                    left = left - (width / retina_scale)
+                    right = right - (width / retina_scale)
+                end
+                if layout.mouse_v_align == 1 then
+                    top = top - (height / retina_scale) / 2
+                    bot = bot - (height / retina_scale) / 2
+                elseif layout.mouse_v_align == 2 then
+                    top = top - (height / retina_scale)
+                    bot = bot - (height / retina_scale)
+                end
+
+                local screen_left, screen_top, screen_right, screen_bot = reaper.JS_Window_GetViewportFromRect(10, 10, 10
+                    , 10
+                    , true)
+
+
+                if left <= 0 then
+                    right = right - left + 1
+                    left = 1
+                elseif right >= screen_right then
+                    left = left - (right - (screen_right - 1))
+                    right = screen_right - 1
+                end
+
+                if bot <= 0 then
+                    top = top - bot
+                    bot = 1
+                elseif top >= screen_top then
+                    bot = bot - (top - (screen_top - 1))
+                    top = screen_top - 1
+                end
+
+                layout.pos_x = left
+                layout.pos_y = bot
+            end
+        else
+            if layout.pos_mode == 0 then
+                local left = x
+                local top = y
+                local right = x + width
+                local bot = y + height
+                if layout.mouse_v_align == 0 then
+                    bot = bot - height
+                    top = top - height
+                elseif layout.mouse_v_align == 1 then
+                    bot = bot - height / 2
+                    top = top - height / 2
+                end
+                if layout.mouse_h_align == 1 then
+                    left = left - width / 2
+                    right = right - width / 2
+                elseif layout.mouse_h_align == 2 then
+                    left = left - width
+                    right = right - width
+                end
+
+                local screen_left, screen_top, screen_right, screen_bot = reaper.JS_Window_GetViewportFromRect(10, 10, 10
+                    , 10, true)
+
+                if left <= 0 then
+                    right = right - left + 1
+                    left = 1
+                elseif right >= screen_right then
+                    left = left - (right - (screen_right - 1))
+                    right = screen_right - 1
+                end
+
+                if top <= 0 then
+                    bot = bot - top + 1
+                    top = 1
+                elseif bot >= screen_bot then
+                    top = top - (bot - (screen_bot - 1))
+                    bot = screen_bot - 1
+                end
+
+                layout.pos_x = left
+                layout.pos_y = top
+            end
+        end
+    end
+    local pos_x = layout.pos_x
+    local pos_y = layout.pos_y
+
+    local char = gfx.getchar()
+    local cap = gfx.mouse_cap
+    local mouse_down = cap & 1 == 1
+    local clicked = false
+    if not layout.mouse_down and mouse_down then
+        clicked = true
+    end
+    layout.mouse_down = mouse_down
+    local cmd = cap & 4 == 4
+    local shift = cap & 8 == 8
+    local alt = cap & 16 == 16
+    local ctrl = cap & 32 == 32
+    local exit = false
+    local command = nil
+
+    if shown then
+        if not layout.shown then
+            -- Only on first shown frame
+            reaper.JS_Window_SetZOrder(layout.hwnd, "TOPMOST")
+            reaper.JS_Window_SetOpacity(layout.hwnd, "ALPHA", 1)
+            layout.shown = true
+        end
+        -- an empty string resizes and reposition current gfx window
+        gfx.init("", width / retina_scale, height / retina_scale, 0, pos_x, pos_y)
+        gfx.update()
+        SetColor(layout.background_color)
+        gfx.rect(0, 0, width, height, true)
+        gfx.y = padding
+    end
+    for i, action in ipairs(actions) do
+        if action.text ~= nil then
+            gfx.x = desc_position
+            SetColor(layout.foreground_color)
+            gfx.drawstr(action.text)
+        else
+            gfx.x = padding
+            local key_pressed = char == action.key and action.cmd == cmd and action.shift == shift and action.alt == alt
+                and
+                action.ctrl == ctrl
+            local hover_mid = gfx.y + gfx.texth / 2
+            local hover_top = math.max(0, hover_mid - line_offset / 2 - gfx.texth / 2)
+            local hover_bot = math.min(gfx.h, hover_mid + line_offset / 2 + gfx.texth / 2)
+            local is_hover = gfx.mouse_x >= 0 and gfx.mouse_x <= gfx.w and gfx.mouse_y >= hover_top and
+                gfx.mouse_y < hover_bot
+            local is_flashing = layout.flash_action == i and reaper.time_precise() - layout.flash_time < 0.1
+            if is_flashing then
+                SetColor(layout.flash_color)
+            elseif key_pressed or (is_hover and clicked) then
+                SetColor(layout.flash_color)
+                layout.flash_action = i
+                layout.flash_time = reaper.time_precise()
+                if action.native then
+                    command = action.action
+                else
+                    command = reaper.NamedCommandLookup(action.action)
+                end
+                if action.exit then
+                    exit = true
+                end
+            elseif is_hover then
+                SetColor(layout.hover_color)
+            else
+                SetColor(layout.foreground_color)
+            end
+            if shown then
+                gfx.drawstr(action.key_text)
+                gfx.x = desc_position
+                gfx.drawstr(action.display_name)
+            end
+        end
+        if i ~= #actions then
+            gfx.y = gfx.y + gfx.texth + line_offset
+        end
+    end
+    return char, command, exit, layout.hwnd
+end
+
 function ActionInfo(int_id, section_id)
     local native, stable_id, command_text
-    command_text = reaper.CF_GetCommandText(section_id, int_id)
+    command_text = Sanitize(reaper.CF_GetCommandText(section_id, int_id))
     local lookup = reaper.ReverseNamedCommandLookup(int_id)
     if lookup == nil then
         native = true
@@ -239,6 +602,45 @@ function ActionPopup(id, section_id)
         reaper.ImGui_EndPopup(ctx)
         return got_action, action, native, action_text
     end
+end
+
+function TextPopup(id)
+    local ret = nil
+    reaper.ImGui_SetNextWindowPos(ctx, center[1], center[2], reaper.ImGui_Cond_Appearing(), 0.5, 0.5)
+    reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_WindowPadding(), 10, 10)
+    reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 10, 8)
+    if reaper.ImGui_BeginPopupModal(ctx, id, nil, popup_flags) then
+        reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBg(), 0x444444ff)
+        reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.7)
+        MoveCursor(3, 16)
+        reaper.ImGui_Text(ctx, "Text")
+        reaper.ImGui_PopStyleVar(ctx)
+        reaper.ImGui_SameLine(ctx)
+        MoveCursor(6, -6)
+        if edit_wants_focus then
+            reaper.ImGui_SetKeyboardFocusHere(ctx)
+            edit_wants_focus = false
+        end
+        reaper.ImGui_PushItemWidth(ctx, 300)
+        _, new_text = reaper.ImGui_InputText(ctx, "##actionname", new_text)
+        reaper.ImGui_PopItemWidth(ctx)
+        reaper.ImGui_PopStyleColor(ctx)
+        MoveCursor(0, 6)
+        local avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
+        if Button("Cancel##edit" .. id, avail_x / 2.1) then
+            reaper.ImGui_CloseCurrentPopup(ctx)
+        end
+        reaper.ImGui_SameLine(ctx)
+        local enter_pressed = reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_KeypadEnter())
+        enter_pressed = enter_pressed or reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Enter())
+        if Button("Ok##edit" .. id, -FLT_MIN) or enter_pressed then
+            ret = new_text
+            reaper.ImGui_CloseCurrentPopup(ctx)
+        end
+        reaper.ImGui_EndPopup(ctx)
+    end
+    reaper.ImGui_PopStyleVar(ctx, 2)
+    return ret
 end
 
 --returns nil if not opened, false if waiting for input, true if got input
@@ -297,12 +699,16 @@ function KeyPopup(id, own_index)
             local duplicate = false
             local duplicate_name = ""
             for j, action in ipairs(files[cur_file_idx].actions) do
-                -- don't check existing action when updating its key
-                if own_index == nil or (own_index ~= nil and own_index ~= j) then
-                    if math.floor(action.key) == math.floor(key) and action.shift == shift and action.ctrl == ctrl and
-                        action.alt == alt and action.cmd == cmd then
-                        duplicate = true
-                        duplicate_name = action.action_text
+                -- skip text "actions"
+                if action.text == nil then
+                    -- don't check existing action when updating its key
+                    if own_index == nil or (own_index ~= nil and own_index ~= j) then
+                        if math.floor(action.key) == math.floor(key) and action.shift == shift and action.ctrl == ctrl
+                            and
+                            action.alt == alt and action.cmd == cmd then
+                            duplicate = true
+                            duplicate_name = action.action_text
+                        end
                     end
                 end
             end
@@ -409,6 +815,25 @@ function ToCap(shift, cmd, ctrl, alt)
     if shift then ret = ret + 8 end
     if alt then ret = ret + 16 end
     if ctrl then ret = ret + 32 end
+    return ret
+end
+
+-- Gets function source, from first line to last line
+function FunctionSource(fn)
+    local info = debug.getinfo(fn, 'S')
+    local line_start = info.linedefined
+    local line_end = info.lastlinedefined
+    local path = info.source:sub(2)
+    local ret = ""
+    local i = 1
+    for line in io.lines(path) do
+        if i >= line_start and i <= line_end then
+            ret = ret .. line .. "\n"
+        elseif i > line_end then
+            break
+        end
+        i = i + 1
+    end
     return ret
 end
 
@@ -524,6 +949,90 @@ function Parse_V1(file, txt)
     file.command_id = reaper.AddRemoveReaScript(true, sections[file.section].id, path, true)
 end
 
+function Parse_V3(file, txt)
+    local function sectionId(section_str)
+        if section_str == "MAIN" then return 1
+        elseif section_str == "MALT" then return 2
+        elseif section_str == "MIDI" then return 3
+        elseif section_str == "EVNT" then return 4
+        elseif section_str == "MEXP" then return 5 end
+    end
+
+    file.actions = {}
+    local section_pat = "--SEC:(%w%w%w%w)"
+    local section_str = string.match(txt, section_pat)
+    file.section = sectionId(section_str)
+    local action_pat = "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+) NATIVE (%S+) ID (%S+) EXIT (%S+) DISPLAY ([^\n]+)"
+    local text_pat = "TEXT ([^\n]*)"
+    local found_at_least_one = false
+    -- Read line by line, skipping empty lines
+    for line in string.gmatch(txt, "[^\r\n]+") do
+        local line_used = false
+        local key, shift, cmd, alt, ctrl, native, id, exit, display = string.match(line, action_pat)
+        if key ~= nil then
+            found_at_least_one = true
+            key = tonumber(key)
+            shift = ToBool(shift)
+            cmd = ToBool(cmd)
+            alt = ToBool(alt)
+            ctrl = ToBool(ctrl)
+            native = ToBool(native)
+            exit = ToBool(exit)
+            local int_id
+            if native then
+                id = tonumber(id)
+                int_id = id
+            else
+                int_id = reaper.NamedCommandLookup(id)
+            end
+            local action_text = reaper.CF_GetCommandText(sections[file.section].id, int_id)
+            table.insert(file.actions, {
+                key = key,
+                action = id,
+                shift = shift,
+                cmd = cmd,
+                alt = alt,
+                ctrl = ctrl,
+                exit = exit,
+                display_name = display,
+                action_text = action_text,
+                native = native,
+                key_text = ToChar(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
+            })
+            line_used = true
+        end
+        if not line_used and file.style == nil then
+            local style = MatchStyle(line)
+            if style ~= nil then
+                file.style = style
+                line_used = true
+            end
+        end
+        if not line_used then
+            local text = string.match(line, text_pat)
+            if text ~= nil then
+                found_at_least_one = true
+                table.insert(file.actions, { text = text })
+                line_used = true
+            else
+                if found_at_least_one then
+                    -- If curent line is not a style, an action or text, we stop parsing metas
+                    break
+                end
+            end
+        end
+    end
+    if file.style == nil then
+        file.style = CloneStyle(default_style)
+    end
+    local show_after_pat = "show_after = (%d%.%d)"
+    file.show_after = string.match(txt, show_after_pat)
+    local path = script_path .. file.path
+    -- get command id by adding it
+    -- not efficient, but it feels overkill to include a SHA1 library just to compute the command id
+    file.command_id = reaper.AddRemoveReaScript(true, sections[file.section].id, path, true)
+end
+
 function Load()
     dirty = {}
     files = {}
@@ -533,10 +1042,22 @@ function Load()
     reaper.EnumerateFiles(script_path, -1)
     local index = 0
     while true do
-        local ret = reaper.EnumerateFiles(script_path, index)
-        if ret == nil then break end
-        if string.sub(ret, 0, #prefix) == prefix then
-            table.insert(files, { name = string.sub(ret, #prefix + 1, #ret - 4), path = ret })
+        local filename = reaper.EnumerateFiles(script_path, index)
+        if filename == nil then break end
+        if string.sub(filename, 0, #prefix) == prefix then
+            table.insert(files, { name = string.sub(filename, #prefix + 1, #filename - 4), path = filename })
+        elseif filename == default_style_filename then
+            local file_io, err = io.open(script_path .. filename, 'r')
+            if file_io == nil then
+                reaper.ShowMessageBox(err, "Error loading default style file")
+            else
+                local txt = file_io:read("*all")
+                file_io:close()
+                local style = MatchStyle(txt)
+                if style ~= nil then
+                    default_style = style
+                end
+            end
         end
         index = index + 1
     end
@@ -557,17 +1078,28 @@ function Load()
             end
             if version == 0 then
                 Parse_V0(file, txt)
+                if file.style == nil then
+                    file.style = CloneStyle(default_style)
+                end
                 SetDirty(file)
                 needs_post_upgrade_save = true
             elseif version == 1 then
                 Parse_V1(file, txt)
+                if file.style == nil then
+                    file.style = CloneStyle(default_style)
+                end
                 SetDirty(file)
                 needs_post_upgrade_save = true
             elseif version == 2 then
                 Parse_V1(file, txt)
+                if file.style == nil then
+                    file.style = CloneStyle(default_style)
+                end
+                SetDirty(file)
+                needs_post_upgrade_save = true
+            elseif version == 3 then
+                Parse_V3(file, txt)
             end
-
-
         end
     end
     if needs_post_upgrade_save then
@@ -589,62 +1121,137 @@ function Load()
     last_dirty_name = ""
 end
 
+function StyleToString(style)
+    local x = ""
+    local y = ""
+    if style.pos_mode ~= 0 then
+        x = string.format("%.1f", style.pos_x)
+        y = string.format("%.1f", style.pos_y)
+    end
+    local w = ""
+    local h = ""
+    if style.size_mode ~= 0 then
+        w = string.format("%.1f", style.width)
+        h = string.format("%.1f", style.height)
+    end
+    return string.format("\nSTYLE BG %x FG %x FC %x HOVER %x FNTSZ %.1f PAD %.1f DESC %.1f LINE %.1f POS %d SIZE %d X %s Y %s W %s H %s MH %d MV %d FONT %s"
+        ,
+        style.background_color, style.foreground_color,
+        style.flash_color, style.hover_color, style.font_size, style.padding, style.desc_offset,
+        style.line_offset, style.pos_mode, style.size_mode, x, y, w, h, style.mouse_h_align, style.mouse_v_align,
+        style.font)
+end
+
+--This function is only made to work for the style table and the actions table
+--It doesn't handle having a named table inside a table among other things
+function TableSource(table, name, indent, first)
+    local result = ""
+    local spaces = string.rep("    ", indent)
+    local long_spaces = string.rep("    ", indent + 1)
+    if name ~= nil then
+        result = spaces .. "local " .. name .. " = {\n"
+    else
+        result = spaces .. "{\n"
+    end
+    for k, v in pairs(table) do
+        if type(v) == "string" then
+            result = result .. string.format('%s%s = "%s",\n', long_spaces, k, v)
+        elseif type(v) == "number" or type(v) == "boolean" then
+            result = result .. long_spaces .. k .. " = " .. tostring(v) .. ",\n"
+        elseif type(v) == "table" then
+            result = result .. TableSource(v, nil, indent + 1, false)
+        end
+    end
+    result = result .. spaces .. "}"
+    if not first then
+        result = result .. ",\n"
+    else
+        result = result .. "\n"
+    end
+    return result
+end
+
+function SaveCurrentStyleToDefaultStyleFile()
+    local str = StyleToString(current_style)
+    local path = script_path .. default_style_filename
+    local file_io, err = io.open(path, 'w')
+    if file_io == nil then
+        reaper.ShowMessageBox(err, "Error saving default style")
+    else
+        file_io, err = file_io:write(str)
+        if file_io == nil then
+            reaper.ShowMessageBox(err, "Error saving default style")
+        else
+            file_io:close()
+        end
+    end
+    default_style = CloneStyle(current_style)
+end
+
+function CloneStyle(style)
+    return {
+        background_color = style.background_color,
+        foreground_color = style.foreground_color,
+        flash_color = style.flash_color,
+        hover_color = style.hover_color,
+        font = style.font,
+        font_size = style.font_size,
+        padding = style.padding,
+        desc_offset = style.desc_offset,
+        line_offset = style.line_offset,
+        pos_mode = style.pos_mode,
+        size_mode = style.size_mode,
+        pos_x = style.pos_x,
+        pos_y = style.pos_y,
+        width = style.width,
+        height = style.height,
+        mouse_h_align = style.mouse_h_align,
+        mouse_v_align = style.mouse_v_align,
+        first_frame = true,
+        shown = false,
+    }
+end
+
+function PasteStyleToCurrent(style)
+    current_style.background_color = style.background_color
+    current_style.foreground_color = style.foreground_color
+    current_style.flash_color = style.flash_color
+    current_style.hover_color = style.hover_color
+    current_style.font = style.font
+    current_style.font_size = style.font_size
+    current_style.padding = style.padding
+    current_style.desc_offset = style.desc_offset
+    current_style.line_offset = style.line_offset
+    current_style.pos_mode = style.pos_mode
+    current_style.size_mode = style.size_mode
+    current_style.pos_x = style.pos_x
+    current_style.pos_y = style.pos_y
+    current_style.width = style.width
+    current_style.height = style.height
+    current_style.mouse_h_align = style.mouse_h_align
+    current_style.mouse_v_align = style.mouse_v_align
+end
+
 function Save()
     local function metadata(file)
         local ret = "\n--[["
+        ret = ret .. StyleToString(file.style)
         for _, action in ipairs(file.actions) do
-            ret = ret .. "\nKEY " .. math.floor(action.key) ..
-                " SHIFT " .. tostring(action.shift) ..
-                " CMD " .. tostring(action.cmd) ..
-                " ALT " .. tostring(action.alt) ..
-                " CTRL " .. tostring(action.ctrl) ..
-                "\nNATIVE " .. tostring(action.native) ..
-                "\nID " .. action.action ..
-                "\nEXIT " .. tostring(action.exit) ..
-                "\nDISPLAY " .. action.display_name
-        end
-        return ret .. "\n]]--"
-    end
-
-    local function cond(action)
-        return "char == " ..
-            math.floor(action.key) ..
-            " and shift == " ..
-            tostring(action.shift) ..
-            " and cmd == " ..
-            tostring(action.cmd) ..
-            " and ctrl == " ..
-            tostring(action.ctrl) ..
-            " and alt == " ..
-            tostring(action.alt)
-    end
-
-    local function commands(section, file)
-        local result = ""
-        for _, action in ipairs(file.actions) do
-            local command_str = ""
-            if action.native then
-                command_str = tostring(action.action)
+            if action.text ~= nil then
+                ret = ret .. "\nTEXT " .. action.text
             else
-                command_str = "reaper.NamedCommandLookup('" .. action.action .. "')"
+                ret = ret .. "\nKEY " .. math.floor(action.key) ..
+                    " SHIFT " .. tostring(action.shift) ..
+                    " CMD " .. tostring(action.cmd) ..
+                    " ALT " .. tostring(action.alt) ..
+                    " CTRL " .. tostring(action.ctrl) ..
+                    " NATIVE " .. tostring(action.native) ..
+                    " ID " .. action.action ..
+                    " EXIT " .. tostring(action.exit) ..
+                    " DISPLAY " .. action.display_name
             end
-            result = result .. cond(action) .. " then\n"
-            if section.name == "Main" or section.name == "Main (alt recording)" then
-                result = result .. "      reaper.Main_OnCommand(" .. command_str .. ",0)"
-            elseif section.name == "MIDI Editor" or section.name == "MIDI Event List Editor" then
-                result = result .. "      reaper.MIDIEditor_OnCommand(midi_editor, " .. command_str .. ")"
-            elseif section.name == "Media Explorer" then
-                result = result .. "      reaper.JS_Window_OnCommand(explorerHWND, " .. command_str .. ")"
-            else
-                reaper.ShowMessageBox("Unknown section")
-            end
-            if not action.exit then
-                result = result .. "\n      reaper.JS_Window_SetFocus(hwnd)"
-            end
-            result = result .. "\n      exit = " .. tostring(action.exit)
-            result = result .. "\n      time_start = reaper.time_precise()\n    elseif "
         end
-        return result
+        return ret .. "\n]]\n"
     end
 
     local function section_setup(file)
@@ -670,86 +1277,64 @@ function Save()
     end
     removed = {}
     for _, file in ipairs(dirty) do
-        local longest = ""
-        for _, action in ipairs(file.actions) do
-            action.hint = string.format("[%s] %s", action.key_text, action.display_name)
-            -- replace " with ' to not break code generation
-            action.hint = string.gsub(action.hint, '"', "'")
-            if #action.hint > #longest then
-                longest = action.hint
-            end
-        end
         local window_name = "KeySequenceListener" .. file.name
         local result = [[
   -- This file is autogenerated, do not modify or move
-  -- VER:2]] .. metadata(file) .. [[
-
-  if reaper.JS_Window_Find == nil then
+  -- VER:3]]
+            .. metadata(file)
+            .. FunctionSource(UI)
+            .. TableSource(file.actions, "actions", 0, true)
+            .. TableSource(file.style, "style", 0, true)
+            .. [[
+if reaper.JS_Window_Find == nil then
     reaper.ShowMessageBox("This script requires js_ReaScriptAPI", "Missing dependency", 0)
     return
-  end
+end
 
-  show_after = ]] .. string.format("%.1f", file.show_after) .. [[
-  
-  time_start = reaper.time_precise()
-  margin = 10
-  shown = false
-  x, y = reaper.GetMousePosition()
-  gfx.setfont(1, "sans-serif", 15)
-  gfx.init("]] .. window_name .. [[", 0, 0, 0, 0, 0)
-  hwnd = reaper.JS_Window_Find("]] .. window_name .. [[", false)
-  reaper.JS_Window_SetStyle(hwnd, "POPUP")
-  reaper.JS_Window_SetOpacity(hwnd,"ALPHA", 0)
-  exit = false ]] .. section_setup(file) .. [[
-  function main()
-    gfx.update()
+local show_after = ]] .. string.format("%.1f", file.show_after) .. [[
+
+local time_start = reaper.time_precise()
+local shown = false]] .. section_setup(file) .. [[
+function main()
     if not shown and reaper.time_precise() - time_start > show_after then
-      reaper.JS_Window_SetOpacity(hwnd,"ALPHA", 1)
-      w = gfx.measurestr("]] .. longest .. [[")
-      --resize window
-      gfx.init("", margin * 2 + w, margin * 2 + gfx.texth * ]] .. #file.actions .. [[, 0, x, y)
-      shown = true
+        shown = true
     end
-    if shown then
-      gfx.set(0.15, 0.15, 0.15)
-      gfx.rect(0, 0, gfx.w, gfx.h, true)
-      gfx.set(1,1,1)
-      gfx.x = margin
-      gfx.y = margin
-    ]]
-        for _, action in ipairs(file.actions) do
-            result = string.format('%s  gfx.drawstr("%s")\n', result, action.hint)
-            result = result .. [[
-      gfx.y = gfx.y + gfx.texth
-      gfx.x = margin
-    ]]
+    local char, command, exit, hwnd = UI(actions, style, shown, "]] .. window_name .. [[")
+    if command ~= nil then
+        ]]
+        local section = sections[file.section]
+        if section.name == "Main" or section.name == "Main (alt recording)" then
+            result = result .. "reaper.Main_OnCommand(command ,0)"
+        elseif section.name == "MIDI Editor" or section.name == "MIDI Event List Editor" then
+            result = result .. "reaper.MIDIEditor_OnCommand(midi_editor, command)"
+        elseif section.name == "Media Explorer" then
+            result = result .. "reaper.JS_Window_OnCommand(explorerHWND, command)"
+        else
+            reaper.ShowMessageBox("Unknown section")
         end
-        result = result .. [[end
-    cap = gfx.mouse_cap
-    cmd = cap & 4 == 4
-    shift = cap & 8 == 8
-    alt = cap & 16 == 16
-    ctrl = cap & 32 == 32
-    char = gfx.getchar()
-    -- 'var == true' does smell, but it's easier to generate
-    if ]] .. commands(sections[file.section], file) .. [[ char > 0 then exit = true end
+        result = result .. [[
+
+        if not exit then
+            reaper.JS_Window_SetFocus(hwnd)
+        end
+    end
     --stop on unfocus
     if reaper.JS_Window_GetFocus() ~= hwnd then exit = true end
     if exit then gfx.quit() return end
     --stop deferring if window is closed
     if char ~= -1 then reaper.defer(main) end
-  end
-  
-  main()
+end
+
+main()
 ]]
         local path = script_path .. prefix .. file.name .. ".lua"
         local file_io, err = io.open(path, 'w')
         if file_io == nil then
-            reaper.ShowMessageBox(err, "Error loading file")
+            reaper.ShowMessageBox(err, "Error saving file")
         else
             file_io, err = file_io:write(result)
             if file_io == nil then
-                reaper.ShowMessageBox(err, "Error loading file")
+                reaper.ShowMessageBox(err, "Error saving file")
             else
                 file_io:close()
                 reaper.AddRemoveReaScript(true, sections[file.section].id, path, true)
@@ -878,7 +1463,8 @@ function Frame()
                 enter_pressed = enter_pressed or reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Enter())
                 if Button("Ok", -FLT_MIN) or (#new_seq_name ~= 0 and enter_pressed) then
                     new_seq_name = ValidateName(new_seq_name)
-                    local new = { name = new_seq_name, actions = {}, section = selected_section, show_after = 1.0 }
+                    local new = { name = new_seq_name, actions = {}, section = selected_section, show_after = 1.0,
+                        style = CloneStyle(default_style) }
                     table.insert(files, new)
                     SetDirty(new)
                     reaper.ImGui_CloseCurrentPopup(ctx)
@@ -893,7 +1479,6 @@ function Frame()
         end
     end
     reaper.ImGui_SameLine(ctx)
-
     do
         avail_x, avail_y = reaper.ImGui_GetContentRegionAvail(ctx)
         if cur_file_idx ~= 0 and reaper.ImGui_BeginChild(ctx, "R", avail_x, avail_y, 0) then
@@ -901,17 +1486,17 @@ function Frame()
             x, y = reaper.ImGui_GetCursorScreenPos(ctx)
             local end_x = x + avail_x
             reaper.ImGui_DrawList_AddRectFilled(draw_list, x, y, end_x, y + header_h * 1.4, 0xffffff14, 3, rect_flags)
-            MoveCursor(6, 10)
             reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.5)
+            MoveCursor(6, 9)
             reaper.ImGui_Text(ctx, "Show hint after")
             reaper.ImGui_PopStyleVar(ctx)
             reaper.ImGui_SameLine(ctx)
-            MoveCursor(-4, -3)
+            MoveCursor(0, -2)
             reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBg(), 0xffffff2f)
             reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBgHovered(), 0xffffff4f)
             reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBgActive(), 0xffffff5f)
             reaper.ImGui_PushItemWidth(ctx, 30)
-            local ret, val = reaper.ImGui_DragDouble(ctx, "##show_after", files[cur_file_idx].show_after, .1, 0, 5,
+            local ret, val = DragDouble("##show_after", files[cur_file_idx].show_after, .1, 0, 5,
                 "%.1fs")
             reaper.ImGui_PopItemWidth(ctx)
             reaper.ImGui_PopStyleColor(ctx, 3)
@@ -926,13 +1511,343 @@ function Frame()
             end
             reaper.ImGui_SameLine(ctx)
             avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
-            MoveCursor(avail_x - 190, -3)
+            MoveCursor(avail_x - 294, -3)
+            reaper.ImGui_SetNextWindowPos(ctx, 0, 0, reaper.ImGui_Cond_Appearing(), 1, 0)
+            if edit_frame_count == 0 then
+                --Ugly hack. Move window to the side and back at the middle to somehow avoid flickering color popups. Only draw window content after that.
+                edit_flags = reaper.ImGui_WindowFlags_AlwaysAutoResize()
+                reaper.ImGui_SetNextWindowPos(ctx, center[1], center[2], reaper.ImGui_Cond_Always(), 0.5, 0.5)
+            end
+            edit_frame_count = edit_frame_count - 1
+            if Button("Edit style", 100) then
+                current_style = CloneStyle(files[cur_file_idx].style)
+                --store hwnd here because setfocus(find_window("key sequences")) doesn't work for some reason ?
+                main_hwnd = reaper.JS_Window_GetFocus()
+                edit_frame_count = 2
+                edit_flags = reaper.ImGui_WindowFlags_NoTitleBar() | reaper.ImGui_WindowFlags_NoBackground() |
+                    reaper.ImGui_WindowFlags_AlwaysAutoResize()
+                reaper.ImGui_OpenPopup(ctx, "Edit style##" .. tostring(cur_file_idx))
+            end
+
+            local shown = edit_frame_count <= 0
+            if edit_frame_count == -1 then
+                reaper.ImGui_SetNextWindowPos(ctx, center[1], center[2], reaper.ImGui_Cond_Always(), 0.5, 0.5)
+            end
+
+            reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_WindowPadding(), 10, 10)
+            reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 10, 8)
+            if reaper.ImGui_BeginPopupModal(ctx, "Edit style##" .. tostring(cur_file_idx), nil, edit_flags) then
+                local focus = "None"
+                reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ChildBg(), 0x2D2D2Dff)
+                local preview_window_name = "SequencePreview"
+                reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBg(), 0xffffff2f)
+                reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBgHovered(), 0xffffff4f)
+                reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_FrameBgActive(), 0xffffff5f)
+                avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
+                if shown and reaper.ImGui_BeginChild(ctx, "LeftPreview", 200, 138) then
+                    MoveCursor(100 - reaper.ImGui_CalcTextSize(ctx, "Position") / 2, 10)
+                    reaper.ImGui_Text(ctx, "Position")
+                    MoveCursor(20, 5)
+                    --Smaller radiobuttons
+                    reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 5, 5)
+                    _, current_style.pos_mode = reaper.ImGui_RadioButtonEx(ctx, " Mouse##position",
+                        current_style.pos_mode, 0)
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "PosMode"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    MoveCursor(20, 0)
+                    _, current_style.pos_mode = reaper.ImGui_RadioButtonEx(ctx, "  Fixed##position",
+                        current_style.pos_mode,
+                        1)
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "PosMode"
+                    end
+                    reaper.ImGui_PopStyleVar(ctx, 1)
+                    if current_style.pos_mode == 1 then
+                        -- Fixed mode
+                        MoveCursor(5, 5)
+                        reaper.ImGui_PushItemWidth(ctx, 190)
+                        _, current_style.pos_x = DragDouble("##previewPosX", current_style.pos_x, 1, 0, 2000,
+                            "x: %.0fpx")
+                        if reaper.ImGui_IsItemHovered(ctx) then
+                            focus = "FixedPos"
+                        end
+                        MoveCursor(5, 0)
+                        _, current_style.pos_y = DragDouble("##previewPosY", current_style.pos_y, 1, 0, 2000,
+                            "y: %.0fpx")
+                        if reaper.ImGui_IsItemHovered(ctx) then
+                            focus = "FixedPos"
+                        end
+                        reaper.ImGui_PopItemWidth(ctx)
+                    else
+                        -- Mouse mode
+                        MoveCursor(5, 5)
+                        reaper.ImGui_PushItemWidth(ctx, 190)
+                        _, current_style.mouse_v_align = reaper.ImGui_Combo(ctx, "##VAlign", current_style.mouse_v_align
+                            ,
+                            "Vertical: Bottom\0Vertical: Middle\0Vertical: Top\0")
+                        if reaper.ImGui_IsItemHovered(ctx) then
+                            focus = "MousePos"
+                        end
+                        MoveCursor(5, 0)
+                        _, current_style.mouse_h_align = reaper.ImGui_Combo(ctx, "##HAlign", current_style.mouse_h_align
+                            ,
+                            "Horizontal: Left\0Horizontal: Middle\0Horizontal: Right\0")
+                        if reaper.ImGui_IsItemHovered(ctx) then
+                            focus = "MousePos"
+                        end
+                        reaper.ImGui_PopItemWidth(ctx)
+                    end
+                    reaper.ImGui_EndChild(ctx)
+                end
+                reaper.ImGui_SameLine(ctx)
+
+                if shown and reaper.ImGui_BeginChild(ctx, "MidPreview", 200, 138) then
+                    MoveCursor(100 - reaper.ImGui_CalcTextSize(ctx, "Size") / 2, 10)
+                    reaper.ImGui_Text(ctx, "Size")
+                    MoveCursor(25, 5)
+                    _, current_style.size_mode = reaper.ImGui_RadioButtonEx(ctx, "Auto##size", current_style.size_mode, 0)
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "SizeMode"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    MoveCursor(20, 0)
+                    _, current_style.size_mode = reaper.ImGui_RadioButtonEx(ctx, "Fixed##size", current_style.size_mode,
+                        1)
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "SizeMode"
+                    end
+                    if current_style.size_mode == 0 then
+                        -- Auto
+                        current_style.width = nil
+                        current_style.height = nil
+                    else
+                        reaper.ImGui_PushItemWidth(ctx, 190)
+                        MoveCursor(5, 5)
+                        _, current_style.width = DragDouble("##previewWidth", current_style.width, 1, 50, 1000,
+                            "Width: %.0fpx")
+                        if reaper.ImGui_IsItemHovered(ctx) then
+                            focus = "FixedSize"
+                        end
+                        MoveCursor(5, 0)
+                        _, current_style.height = DragDouble("##previewHeight", current_style.height, 1, 50, 1000,
+                            "Height: %.0fpx")
+                        if reaper.ImGui_IsItemHovered(ctx) then
+                            focus = "FixedSize"
+                        end
+                        reaper.ImGui_PopItemWidth(ctx)
+                    end
+                    reaper.ImGui_EndChild(ctx)
+                end
+                reaper.ImGui_SameLine(ctx)
+
+                if shown and reaper.ImGui_BeginChild(ctx, "RightPreview", 200, 138) then
+                    MoveCursor(100 - reaper.ImGui_CalcTextSize(ctx, "Layout") / 2, 10)
+                    reaper.ImGui_Text(ctx, "Layout")
+                    MoveCursor(0, 10)
+                    reaper.ImGui_PushItemWidth(ctx, 190)
+                    MoveCursor(5, 0)
+                    _, current_style.padding = DragDouble("##previewPadding", current_style.padding, .1, 0, 60,
+                        "Padding: %.1f")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "Padding"
+                    end
+                    MoveCursor(5, 0)
+                    _, current_style.line_offset = DragDouble("##previewLineOffset", current_style.line_offset, .1, 0,
+                        60, "Line offset: %.1f")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "LineOffset"
+                    end
+                    MoveCursor(5, 0)
+                    _, current_style.desc_offset = DragDouble("##previewDescOffset", current_style.desc_offset, .1, 0,
+                        60, "Desc offset: %.1f")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "DescOffset"
+                    end
+                    reaper.ImGui_PopItemWidth(ctx)
+                    reaper.ImGui_EndChild(ctx)
+                end
+
+                local font_input_active = false
+                MoveCursor(0, 4)
+                if shown and reaper.ImGui_BeginChild(ctx, "BottomLeftPreview", 300, 113) then
+                    avail_x, avail_y = reaper.ImGui_GetContentRegionAvail(ctx)
+                    x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+                    MoveCursor(150 - reaper.ImGui_CalcTextSize(ctx, "Font") / 2, 8)
+                    reaper.ImGui_Text(ctx, "Font")
+                    reaper.ImGui_PushItemWidth(ctx, 280)
+                    MoveCursor(10, 15)
+                    _, current_style.font = reaper.ImGui_InputText(ctx, "##previewFont", current_style.font)
+                    font_input_active = reaper.ImGui_IsItemActive(ctx)
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "Font"
+                    end
+                    MoveCursor(10, 2)
+                    _, current_style.font_size = DragDouble("##previewFontSize", current_style.font_size, .5, 3, 100,
+                        "Font size: %.1f")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "FontSize"
+                    end
+                    reaper.ImGui_PopItemWidth(ctx)
+                    reaper.ImGui_EndChild(ctx)
+                end
+                reaper.ImGui_SameLine(ctx)
+
+                if shown and reaper.ImGui_BeginChild(ctx, "BottomRightPreview", -FLT_MIN, 108) then
+                    MoveCursor(150 - reaper.ImGui_CalcTextSize(ctx, "Colors") / 2, 10)
+                    reaper.ImGui_Text(ctx, "Colors")
+                    MoveCursor(10, 10)
+                    _, current_style.foreground_color = reaper.ImGui_ColorEdit3(ctx, "##previewFG",
+                        current_style.foreground_color,
+                        reaper.ImGui_ColorEditFlags_NoInputs())
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "FG"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    reaper.ImGui_Text(ctx, "Text")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "FG"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    MoveCursor(60, 0)
+                    _, current_style.hover_color = reaper.ImGui_ColorEdit3(ctx, "##previewHover",
+                        current_style.hover_color,
+                        reaper.ImGui_ColorEditFlags_NoInputs())
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "Hover"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    reaper.ImGui_Text(ctx, "Hover")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "Hover"
+                    end
+                    MoveCursor(10, 0)
+                    _, current_style.background_color = reaper.ImGui_ColorEdit3(ctx, "##previewBG",
+                        current_style.background_color,
+                        reaper.ImGui_ColorEditFlags_NoInputs())
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "BG"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    reaper.ImGui_Text(ctx, "Background")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "BG"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    MoveCursor(20, 0)
+                    _, current_style.flash_color = reaper.ImGui_ColorEdit3(ctx, "##previewFlash",
+                        current_style.flash_color,
+                        reaper.ImGui_ColorEditFlags_NoInputs())
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "Flash"
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    reaper.ImGui_Text(ctx, "Flash")
+                    if reaper.ImGui_IsItemHovered(ctx) then
+                        focus = "Flash"
+                    end
+                    reaper.ImGui_EndChild(ctx)
+                end
+
+                MoveCursor(0, 5)
+                if shown and reaper.ImGui_BeginChild(ctx, "##previewHelp", -FLT_MIN, 30) then
+                    MoveCursor(10, 8)
+                    reaper.ImGui_Text(ctx, style_help_text[focus])
+                    reaper.ImGui_EndChild(ctx)
+                end
+                reaper.ImGui_PopStyleColor(ctx, 4)
+
+                local quit_from_gfx = false
+                if preview_opened then
+                    local char, _, _, _ = UI(files[cur_file_idx].actions, current_style, true,
+                        preview_window_name)
+                    if char == 112 then --Pressed P in gfx
+                        quit_from_gfx = true
+                    end
+                end
+                if (not font_input_active and reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_P())) or quit_from_gfx then
+                    if not preview_opened then
+                        --reset opened state
+                        current_style.first_frame = true
+                        current_style.shown = false
+                        preview_opened = true
+                    else
+                        preview_opened = false
+                        gfx.quit()
+                        reaper.JS_Window_SetFocus(main_hwnd)
+                    end
+                end
+
+                if shown then
+                    MoveCursor(0, 10)
+                    if Button("...", 20) then
+                        reaper.ImGui_OpenPopup(ctx, "MorePopup")
+                    end
+                    if reaper.ImGui_BeginPopupContextItem(ctx, 'MorePopup') then
+                        reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_HeaderHovered(), 0xffffff44)
+                        if reaper.ImGui_Selectable(ctx, "Copy style", false) then
+                            copied_style = CloneStyle(current_style)
+                        end
+                        if copied_style == nil then
+                            reaper.ImGui_BeginDisabled(ctx)
+                        end
+                        if reaper.ImGui_Selectable(ctx, "Paste style", false) then
+                            PasteStyleToCurrent(copied_style)
+                        end
+                        if copied_style == nil then
+                            reaper.ImGui_EndDisabled(ctx)
+                        end
+                        if reaper.ImGui_Selectable(ctx, "Reset to defaults", false) then
+                            current_style = CloneStyle(default_style)
+                        end
+                        if reaper.ImGui_Selectable(ctx, "Save as default for new sequences", false) then
+                            SaveCurrentStyleToDefaultStyleFile()
+                        end
+                        if reaper.ImGui_Selectable(ctx, "Apply to all existing sequences", false) then
+                            local msg = "Are you sure you want to apply this style to all existing sequences ?\n This will modify "
+                                .. #files .. " sequences."
+                            if reaper.ShowMessageBox(msg, "This action is irreversible", 1) == 1 then
+                                for _, file in ipairs(files) do
+                                    file.style = CloneStyle(current_style)
+                                    SetDirty(file)
+                                end
+                            end
+                        end
+                        reaper.ImGui_PopStyleColor(ctx)
+                        reaper.ImGui_EndPopup(ctx)
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
+                    if Button("Cancel", avail_x / 2.1) then
+                        if preview_opened then
+                            preview_opened = false
+                            gfx.quit()
+                        end
+                        reaper.ImGui_CloseCurrentPopup(ctx)
+                    end
+                    reaper.ImGui_SameLine(ctx)
+                    if Button("Save", -FLT_MIN) then
+                        if preview_opened then
+                            preview_opened = false
+                            gfx.quit()
+                        end
+                        files[cur_file_idx].style = CloneStyle(current_style)
+                        SetDirty(files[cur_file_idx])
+                        reaper.ImGui_CloseCurrentPopup(ctx)
+                    end
+                end
+                reaper.ImGui_EndPopup(ctx)
+            end
+            reaper.ImGui_PopStyleVar(ctx, 2)
+            reaper.ImGui_SameLine(ctx)
+            MoveCursor(0, -3)
             if files[cur_file_idx].command_id ~= nil then
                 local section_id = sections[files[cur_file_idx].section].id
                 local command_id = files[cur_file_idx].command_id
                 local ret_desc, shortcut = reaper.JS_Actions_GetShortcutDesc(section_id, command_id, 0)
                 if ret_desc then
-                    if Button(shortcut, 160) then
+                    if Button(shortcut, 155) then
                         reaper.JS_Actions_DoShortcutDialog(section_id, command_id, 0)
                     end
                     reaper.ImGui_SameLine(ctx)
@@ -960,14 +1875,17 @@ function Frame()
 
             local table_h = math.min(avail_y - 36, action_count * 30 + header_h + padding_table)
             local table_flags = reaper.ImGui_TableFlags_RowBg() | reaper.ImGui_TableFlags_ScrollY()
-            local has_actions = #files[cur_file_idx].actions > 0
+            local cur_file_actions = files[cur_file_idx].actions
+            local has_actions = #cur_file_actions > 0
             if has_actions and reaper.ImGui_BeginTable(ctx, "table", 3, table_flags, avail_x, table_h) then
                 reaper.ImGui_DrawList_AddRectFilled(draw_list, x, y, x + avail_x, y + table_h, 0xffffff14, 3, rect_flags)
                 reaper.ImGui_DrawList_AddRectFilled(draw_list, x, y, x + avail_x, y + header_h, header_col, 3, rect_flags)
                 table_scroll = reaper.ImGui_GetScrollY(ctx)
                 reaper.ImGui_TableSetupColumn(ctx, "", reaper.ImGui_TableColumnFlags_WidthFixed(), 75)
-                reaper.ImGui_TableSetupColumn(ctx, " Key", reaper.ImGui_TableColumnFlags_WidthFixed(), 160)
-                reaper.ImGui_TableSetupColumn(ctx, " Action", reaper.ImGui_TableColumnFlags_WidthStretch())
+                reaper.ImGui_TableSetupColumn(ctx, "", reaper.ImGui_TableColumnFlags_WidthFixed(),
+                    160)
+                reaper.ImGui_TableSetupColumn(ctx, "",
+                    reaper.ImGui_TableColumnFlags_WidthStretch())
                 reaper.ImGui_TableNextRow(ctx)
                 reaper.ImGui_TableNextColumn(ctx)
                 reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_Alpha(), 0.6)
@@ -976,15 +1894,15 @@ function Frame()
                 reaper.ImGui_Text(ctx, "Key")
                 reaper.ImGui_TableNextColumn(ctx)
                 MoveCursor(6, 0)
-                reaper.ImGui_Text(ctx, "Action")
+                reaper.ImGui_Text(ctx, "Action / Text")
                 reaper.ImGui_PopStyleVar(ctx)
                 if action_count > 0 then
                     --don't know why that works but next line pads the top of first row
                     reaper.ImGui_SetCursorPosY(ctx, reaper.ImGui_GetCursorPosY(ctx))
                 end
                 reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 6, 4)
-                local cur_file_actions = files[cur_file_idx].actions
                 for i, action in ipairs(cur_file_actions) do
+                    local is_text = action.text ~= nil
                     reaper.ImGui_PushID(ctx, tostring(i))
                     reaper.ImGui_TableNextRow(ctx)
                     reaper.ImGui_TableNextColumn(ctx)
@@ -1020,11 +1938,11 @@ function Frame()
                         SetDirty(files[cur_file_idx])
                     end
                     reaper.ImGui_TableNextColumn(ctx)
-                    if Button(action.key_text, -FLT_MIN) then
+                    if not is_text and Button(action.key_text, -FLT_MIN) then
                         key_popup_requested = true
                         waiting_for_key = i
                     end
-                    if waiting_for_key == i then
+                    if not is_text and waiting_for_key == i then
                         local ret, key, key_text, cmd, shift, alt, ctrl = KeyPopup("##" .. tostring(i), i)
                         if ret == nil then
                             waiting_for_key = -1
@@ -1042,22 +1960,36 @@ function Frame()
 
                     reaper.ImGui_TableNextColumn(ctx)
                     reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ButtonTextAlign(), 0, 0.5)
-                    local btn_text = action.display_name
-                    if not action.exit then
-                        btn_text = "  " .. btn_text
-                    end
-                    if action.display_name ~= action.action_text then
-                        btn_text = btn_text .. " (" .. action.action_text .. ")"
-                    end
-                    if Button("  " .. btn_text, -6) then
-                        new_display_name = action.display_name
-                        new_exit = action.exit
-                        edit_wants_focus = true
-                        reaper.ImGui_OpenPopup(ctx, "Edit action##" .. tostring(i))
-                    end
-                    if not action.exit then
-                        local x, y = reaper.ImGui_GetItemRectMin(ctx)
-                        reaper.ImGui_DrawList_AddCircleFilled(draw_list, x + 9, y + 10, 3, 0xffffffaa, 10)
+                    if is_text then
+                        local btn_text = action.text
+                        local alpha = nil
+                        if btn_text == "" then
+                            alpha = 0.5
+                            btn_text = "(Empty)"
+                        end
+                        if Button("  " .. btn_text, -6, nil, alpha) then
+                            reaper.ImGui_OpenPopup(ctx, "Edit text##" .. tostring(i))
+                            edit_wants_focus = true
+                            new_text = action.text
+                        end
+                    else
+                        local btn_text = action.display_name
+                        if not action.exit then
+                            btn_text = "  " .. btn_text
+                        end
+                        if action.display_name ~= action.action_text then
+                            btn_text = btn_text .. " (" .. action.action_text .. ")"
+                        end
+                        if Button("  " .. btn_text, -6) then
+                            new_display_name = action.display_name
+                            new_exit = action.exit
+                            edit_wants_focus = true
+                            reaper.ImGui_OpenPopup(ctx, "Edit action##" .. tostring(i))
+                        end
+                        if not action.exit then
+                            local x, y = reaper.ImGui_GetItemRectMin(ctx)
+                            reaper.ImGui_DrawList_AddCircleFilled(draw_list, x + 9, y + 10, 3, 0xffffffaa, 10)
+                        end
                     end
                     reaper.ImGui_PopStyleVar(ctx)
 
@@ -1104,7 +2036,7 @@ function Frame()
                             if new_display_name == "" then
                                 new_display_name = action.action_text
                             end
-                            action.display_name = new_display_name
+                            action.display_name = Sanitize(new_display_name)
                             action.exit = new_exit
                             SetDirty(files[cur_file_idx])
                             reaper.ImGui_CloseCurrentPopup(ctx)
@@ -1124,7 +2056,7 @@ function Frame()
                             if new_display_name == "" then
                                 new_display_name = action.action_text
                             end
-                            action.display_name = new_display_name
+                            action.display_name = Sanitize(new_display_name)
                             action.exit = new_exit
                             SetDirty(files[cur_file_idx])
                             reaper.ImGui_CloseCurrentPopup(ctx)
@@ -1132,6 +2064,11 @@ function Frame()
                         reaper.ImGui_EndPopup(ctx)
                     end
                     reaper.ImGui_PopStyleVar(ctx, 2)
+                    local ret_text = TextPopup("Edit text##" .. tostring(i))
+                    if ret_text ~= nil then
+                        action.text = Sanitize(ret_text)
+                        SetDirty(files[cur_file_idx])
+                    end
 
                     if waiting_for_action == i then
                         local ret, new_action, native, new_action_text = ActionPopup(tostring(i),
@@ -1139,6 +2076,9 @@ function Frame()
                         if ret == nil then
                             waiting_for_action = -1
                         elseif ret then
+                            if action.action_text == action.display_name then
+                                action.display_name = new_action_text
+                            end
                             action.action = new_action
                             action.action_text = new_action_text
                             action.native = native
@@ -1151,12 +2091,24 @@ function Frame()
                 reaper.ImGui_PopStyleVar(ctx)
                 reaper.ImGui_EndTable(ctx)
             end
+            local avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
             MoveCursor(0, 6)
-            if Button("Add Shortcut", -FLT_MIN, 25) then
+            if Button("Add Shortcut", avail_x / 2, 25) then
                 adding = { key_text = "...", action_text = "...", action = -1, key = -1, exit = true,
                     display_name = "..." }
                 key_popup_requested = true
                 waiting_for_key = 0
+            end
+            reaper.ImGui_SameLine(ctx)
+            if Button("Add Text/Separator", -FLT_MIN, 25) then
+                new_text = ""
+                edit_wants_focus = true
+                reaper.ImGui_OpenPopup(ctx, "New text")
+            end
+            local ret_text = TextPopup("New text")
+            if ret_text ~= nil then
+                table.insert(cur_file_actions, { text = Sanitize(ret_text) })
+                SetDirty(files[cur_file_idx])
             end
             if waiting_for_key == 0 then
                 local ret, key, key_text, cmd, shift, alt, ctrl = KeyPopup("##new")
@@ -1179,6 +2131,7 @@ function Frame()
                 if ret == nil then
                     waiting_for_action = -1
                 elseif ret then
+                    action_text = Sanitize(action_text)
                     adding.action = action
                     adding.action_text = action_text
                     adding.display_name = action_text
@@ -1225,7 +2178,7 @@ function Loop()
     reaper.ImGui_SetNextWindowSize(ctx, 700, 300, reaper.ImGui_Cond_FirstUseEver())
     --title bar padding
     reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 10, 8)
-    local visible, open = reaper.ImGui_Begin(ctx, window_title, true, window_flags)
+    local visible, open = reaper.ImGui_Begin(ctx, imgui_window_name, true, window_flags)
     reaper.ImGui_PopStyleVar(ctx)
     if visible then
         Frame()
