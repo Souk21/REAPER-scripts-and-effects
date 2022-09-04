@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="f87a154dc8177eb4889fd82d158b072d31e06d8d">
+<index version="1" name="Souk21 ReaPack" commit="4757519e2e23149d0f8d2ff23f23980b6960cf14">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -89,6 +89,17 @@ Internal: Rely on 'metadata' instead of parsing lua code]]></changelog>
       <version name="1.6" author="Souk21" time="2022-08-01T12:47:57Z">
         <changelog><![CDATA[Fix nested sequences]]></changelog>
         <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/f87a154dc8177eb4889fd82d158b072d31e06d8d/Scripts/Key%20Sequences.lua</source>
+      </version>
+      <version name="2.0beta1" author="Souk21" time="2022-09-04T20:12:04Z">
+        <changelog><![CDATA[Retina Support
+Style Editor (with preview)
+Text/Separator entries
+Hints are clickable
+Hints flash when clicked or shortcut is pressed
+Screen border detection
+Fixed bug with naming duplicate sequences
+Fixed changing action keeping previous action name as display text]]></changelog>
+        <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/4757519e2e23149d0f8d2ff23f23980b6960cf14/Scripts/Key%20Sequences.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
