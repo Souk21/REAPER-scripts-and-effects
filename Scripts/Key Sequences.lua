@@ -2,15 +2,8 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Retina Support
---   Style Editor (with preview)
---   Text/Separator entries
---   Hints are clickable
---   Hints flash when clicked or shortcut is pressed
---   Screen border detection
---   Fixed bug with naming duplicate sequences
---   Fixed changing action keeping previous action name as display text
---@version 2.0beta1
+--   Sort sequences list alphabetically
+--@version 2.0beta2
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 
@@ -1106,6 +1099,7 @@ function Load()
         Save()
         Load()
     end
+    table.sort(files, function(a, b) return a.name:upper() < b.name:upper() end)
     if first_load and #files > 0 then
         cur_file_idx = 1
         first_load = false
