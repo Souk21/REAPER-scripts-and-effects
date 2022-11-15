@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="db9f234941b1270d7528d6855338a193c44099ba">
+<index version="1" name="Souk21 ReaPack" commit="7e3723dfaba7a989f9db997f3046e9ca446594ff">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -116,6 +116,10 @@ Close hints before executing command (allows e.g 'under mouse cursor' actions)
 Fix bug with " key
 Discard display name if reassigning an action to an unknown command]]></changelog>
         <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/db9f234941b1270d7528d6855338a193c44099ba/Scripts/Key%20Sequences.lua</source>
+      </version>
+      <version name="2.0beta4" author="Souk21" time="2022-11-15T22:28:26Z">
+        <changelog><![CDATA[Remember previously focused window and give its focus back before executing a command]]></changelog>
+        <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/7e3723dfaba7a989f9db997f3046e9ca446594ff/Scripts/Key%20Sequences.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
