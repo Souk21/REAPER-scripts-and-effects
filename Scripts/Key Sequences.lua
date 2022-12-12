@@ -2,8 +2,9 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Remember previously focused window and give its focus back before executing a command
---@version 2.0beta4
+--   Update to ReaImGui 0.8.1
+--   Add "Export summary to CSV"
+--@version 2.0beta5
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 
@@ -22,7 +23,7 @@ local draw_list
 local font
 if font_name ~= nil then
     font = reaper.ImGui_CreateFont(font_name, 13)
-    reaper.ImGui_AttachFont(ctx, font)
+    reaper.ImGui_Attach(ctx, font)
 end
 local FLT_MIN = reaper.ImGui_NumericLimits_Float()
 local sections = {
@@ -144,6 +145,36 @@ local styles = {
 
 function Move(t, old, new)
     table.insert(t, new, table.remove(t, old))
+end
+
+function StripComma(str)
+    str = tostring(str)
+    str = string.gsub(str, ",", "")
+    return str
+end
+
+function SequencesToCSV()
+    local result = "Sequence,Key,Text,Command,Hide,Keep Open\n"
+    for _, sequence in ipairs(files) do
+        for _, action in ipairs(sequence.actions) do
+            if action.text ~= nil then
+                result = result .. string.format("%s,,%s,,,\n",
+                    StripComma(sequence.name),
+                    StripComma(action.text)
+                )
+            else
+                result = result .. string.format("%s,%s,%s,%s,%s,%s\n",
+                    StripComma(sequence.name),
+                    StripComma(action.key_text),
+                    StripComma(action.display_name),
+                    StripComma(action.action_text),
+                    StripComma(action.hidden),
+                    StripComma(not action.exit)
+                )
+            end
+        end
+    end
+    return result
 end
 
 function Button(txt, wIn, hIn, alpha)
@@ -845,12 +876,12 @@ function ToChar(int, cap)
 end
 
 function MoveCursor(x, y)
-    reaper.ImGui_SetCursorPosX(ctx, reaper.ImGui_GetCursorPosX(ctx) + x)
-    reaper.ImGui_SetCursorPosY(ctx, reaper.ImGui_GetCursorPosY(ctx) + y)
+    local ox, oy = reaper.ImGui_GetCursorPos(ctx)
+    reaper.ImGui_SetCursorPos(ctx, ox + x, oy + y)
 end
 
 function ToBool(str)
-    if str == "true" then return true else return false end
+    return str == "true"
 end
 
 function ToCap(shift, cmd, ctrl, alt)
@@ -1554,8 +1585,21 @@ function Frame()
                 reaper.ImGui_EndListBox(ctx)
             end
             MoveCursor(0, 5)
+            if Button("...", 25, 25) then
+                reaper.ImGui_OpenPopup(ctx, "SeqMorePopup")
+            end
+            if reaper.ImGui_BeginPopupContextItem(ctx, "SeqMorePopup") then
+                reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_HeaderHovered(), 0xffffff44)
+                if reaper.ImGui_Selectable(ctx, "Export summary to CSV", false) then
+                    reaper.ShowConsoleMsg(SequencesToCSV())
+                end
+                reaper.ImGui_PopStyleColor(ctx)
+                reaper.ImGui_EndPopup(ctx)
+            end
+            reaper.ImGui_SameLine(ctx)
+
             x = reaper.ImGui_GetContentRegionAvail(ctx)
-            if Button("Add", x / 2.1, 25) then
+            if Button("Add", x / 2.15, 25) then
                 new_seq_name = ""
                 new_wants_focus = true
                 reaper.ImGui_OpenPopup(ctx, "New Sequence")
@@ -1810,6 +1854,8 @@ function Frame()
                     MoveCursor(100 - reaper.ImGui_CalcTextSize(ctx, "Size") / 2, 10)
                     reaper.ImGui_Text(ctx, "Size")
                     MoveCursor(25, 5)
+                    -- small radio buttons
+                    reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 5, 5)
                     _, current_style.size_mode = reaper.ImGui_RadioButtonEx(ctx, "Auto##size", current_style.size_mode, 0)
                     if reaper.ImGui_IsItemHovered(ctx) then
                         focus = "SizeMode"
@@ -1818,6 +1864,7 @@ function Frame()
                     MoveCursor(20, 0)
                     _, current_style.size_mode = reaper.ImGui_RadioButtonEx(ctx, "Fixed##size", current_style.size_mode,
                         1)
+                    reaper.ImGui_PopStyleVar(ctx)
                     if reaper.ImGui_IsItemHovered(ctx) then
                         focus = "SizeMode"
                     end
@@ -1873,7 +1920,9 @@ function Frame()
                 end
 
                 local font_input_active = false
-                MoveCursor(0, 4)
+                if shown then
+                    MoveCursor(0, 4)
+                end
                 if shown and reaper.ImGui_BeginChild(ctx, "BottomLeftPreview", 300, 113) then
                     avail_x, avail_y = reaper.ImGui_GetContentRegionAvail(ctx)
                     x, y = reaper.ImGui_GetCursorScreenPos(ctx)
@@ -1953,7 +2002,9 @@ function Frame()
                     reaper.ImGui_EndChild(ctx)
                 end
 
-                MoveCursor(0, 5)
+                if shown then
+                    MoveCursor(0, 5)
+                end
                 if shown and reaper.ImGui_BeginChild(ctx, "##previewHelp", -FLT_MIN, 30) then
                     MoveCursor(10, 8)
                     reaper.ImGui_Text(ctx, style_help_text[focus])
@@ -2100,8 +2151,8 @@ function Frame()
                 reaper.ImGui_Text(ctx, "Action / Text")
                 reaper.ImGui_PopStyleVar(ctx)
                 if action_count > 0 then
-                    --don't know why that works but this line pads the top of first row
-                    reaper.ImGui_SetCursorPosY(ctx, reaper.ImGui_GetCursorPosY(ctx))
+                    -- Pad the top of first row
+                    reaper.ImGui_Dummy(ctx, 0, 0)
                 end
                 reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 6, 4)
                 for i, action in ipairs(cur_file_actions) do
