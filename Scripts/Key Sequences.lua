@@ -2,8 +2,8 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Try to fix unicode issues
---@version 2.0beta6
+--   Correctly escape '\'
+--@version 2.0beta7
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 
@@ -338,7 +338,7 @@ end
 
 function Sanitize(str)
     str = string.gsub(str, "\"", "'")
-    str = string.gsub(str, "\\", "")
+    str = string.gsub(str, "\\", "\\\\")
     return string.gsub(str, "]]", "")
 end
 
@@ -1386,6 +1386,7 @@ function TableSource(table, name, indent, first)
             if v == '"' then
                 v = "\\\""
             end
+            v = Sanitize(v)
             result = result .. string.format('%s%s = "%s",\n', long_spaces, k, v)
         elseif type(v) == "number" or type(v) == "boolean" then
             result = result .. long_spaces .. k .. " = " .. tostring(v) .. ",\n"
