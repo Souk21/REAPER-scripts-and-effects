@@ -2,9 +2,8 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Update to ReaImGui 0.8.1
---   Add "Export summary to CSV"
---@version 2.0beta5
+--   Try to fix unicode issues
+--@version 2.0beta6
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 
@@ -27,11 +26,11 @@ if font_name ~= nil then
 end
 local FLT_MIN = reaper.ImGui_NumericLimits_Float()
 local sections = {
-    { name = "Main", id = 0, short_name = "Main" },
-    { name = "Main (alt recording)", id = 100, short_name = "Main (alt)" },
-    { name = "MIDI Editor", id = 32060, short_name = "Midi Editor" },
+    { name = "Main",                   id = 0,     short_name = "Main" },
+    { name = "Main (alt recording)",   id = 100,   short_name = "Main (alt)" },
+    { name = "MIDI Editor",            id = 32060, short_name = "Midi Editor" },
     { name = "MIDI Event List Editor", id = 32061, short_name = "Midi Event List" },
-    { name = "Media Explorer", id = 32063, short_name = "Media Ex." }
+    { name = "Media Explorer",         id = 32063, short_name = "Media Ex." }
     --It's impossible to send commands to midi inline editor
     --{name= "MIDI Inline Editor", id=32062, short_name="Midi Inline"},
 }
@@ -70,10 +69,10 @@ local default_style = {
     padding = 20,
     desc_offset = 20,
     line_offset = 5,
-    pos_mode = 0, --0 follow mouse, 1 fixed position
-    size_mode = 0, --0 auto, 1 fixed size
-    mouse_h_align = 0, --0 left, 1 middle, 2 right
-    mouse_v_align = 0, --0 bottom, 1 middle, 2 top
+    pos_mode = 0,       --0 follow mouse, 1 fixed position
+    size_mode = 0,      --0 auto, 1 fixed size
+    mouse_h_align = 0,  --0 left, 1 middle, 2 right
+    mouse_v_align = 0,  --0 bottom, 1 middle, 2 top
     first_frame = true, --set to false by UI() after first frame
     shown = false,
 }
@@ -109,38 +108,38 @@ local main_hwnd = nil
 
 -- global colors/styles
 local colors = {
-    { reaper.ImGui_Col_WindowBg(), 0x202123FF },
-    { reaper.ImGui_Col_PopupBg(), 0x202123FF },
-    { reaper.ImGui_Col_TitleBgActive(), 0x343434ff },
-    { reaper.ImGui_Col_TitleBg(), 0x242424ff },
-    { reaper.ImGui_Col_Button(), 0x565656ff },
-    { reaper.ImGui_Col_ButtonHovered(), 0x606060ff },
-    { reaper.ImGui_Col_ButtonActive(), 0x707070ff },
-    { reaper.ImGui_Col_FrameBg(), 0x00000000 },
-    { reaper.ImGui_Col_FrameBgHovered(), 0xffffff33 },
-    { reaper.ImGui_Col_Header(), 0xFFFFFF00 },
-    { reaper.ImGui_Col_HeaderHovered(), 0xFCFCFC00 },
-    { reaper.ImGui_Col_HeaderActive(), 0xFFFFFF00 },
-    { reaper.ImGui_Col_ChildBg(), 0x2D2D2D00 },
-    { reaper.ImGui_Col_ScrollbarBg(), 0xfff00000 },
-    { reaper.ImGui_Col_TableRowBgAlt(), 0x00000000 },
-    { reaper.ImGui_Col_Text(), 0xffffffcd },
-    { reaper.ImGui_Col_ResizeGrip(), 0xffffff33 },
+    { reaper.ImGui_Col_WindowBg(),          0x202123FF },
+    { reaper.ImGui_Col_PopupBg(),           0x202123FF },
+    { reaper.ImGui_Col_TitleBgActive(),     0x343434ff },
+    { reaper.ImGui_Col_TitleBg(),           0x242424ff },
+    { reaper.ImGui_Col_Button(),            0x565656ff },
+    { reaper.ImGui_Col_ButtonHovered(),     0x606060ff },
+    { reaper.ImGui_Col_ButtonActive(),      0x707070ff },
+    { reaper.ImGui_Col_FrameBg(),           0x00000000 },
+    { reaper.ImGui_Col_FrameBgHovered(),    0xffffff33 },
+    { reaper.ImGui_Col_Header(),            0xFFFFFF00 },
+    { reaper.ImGui_Col_HeaderHovered(),     0xFCFCFC00 },
+    { reaper.ImGui_Col_HeaderActive(),      0xFFFFFF00 },
+    { reaper.ImGui_Col_ChildBg(),           0x2D2D2D00 },
+    { reaper.ImGui_Col_ScrollbarBg(),       0xfff00000 },
+    { reaper.ImGui_Col_TableRowBgAlt(),     0x00000000 },
+    { reaper.ImGui_Col_Text(),              0xffffffcd },
+    { reaper.ImGui_Col_ResizeGrip(),        0xffffff33 },
     { reaper.ImGui_Col_ResizeGripHovered(), 0xffffff44 },
-    { reaper.ImGui_Col_Border(), 0x606060ff },
+    { reaper.ImGui_Col_Border(),            0x606060ff },
 }
 local styles = {
     --window rounding causes a transparent line to show between title bar and inner window :/
-    { reaper.ImGui_StyleVar_WindowRounding(), 7 },
-    { reaper.ImGui_StyleVar_WindowPadding(), 10, 10 },
-    { reaper.ImGui_StyleVar_WindowBorderSize(), 1 },
-    { reaper.ImGui_StyleVar_WindowTitleAlign(), 0.5, 0.5 },
-    { reaper.ImGui_StyleVar_FrameBorderSize(), 0 },
-    { reaper.ImGui_StyleVar_FrameRounding(), 3 },
-    { reaper.ImGui_StyleVar_ScrollbarSize(), 12 },
+    { reaper.ImGui_StyleVar_WindowRounding(),    7 },
+    { reaper.ImGui_StyleVar_WindowPadding(),     10,  10 },
+    { reaper.ImGui_StyleVar_WindowBorderSize(),  1 },
+    { reaper.ImGui_StyleVar_WindowTitleAlign(),  0.5, 0.5 },
+    { reaper.ImGui_StyleVar_FrameBorderSize(),   0 },
+    { reaper.ImGui_StyleVar_FrameRounding(),     3 },
+    { reaper.ImGui_StyleVar_ScrollbarSize(),     12 },
     { reaper.ImGui_StyleVar_ScrollbarRounding(), 12 },
-    { reaper.ImGui_StyleVar_CellPadding(), 3, 5 },
-    { reaper.ImGui_StyleVar_ChildRounding(), 3 },
+    { reaper.ImGui_StyleVar_CellPadding(),       3,   5 },
+    { reaper.ImGui_StyleVar_ChildRounding(),     3 },
 }
 
 function Move(t, old, new)
@@ -301,10 +300,12 @@ function MatchStyle(str)
     end
 
     -- Using * instead of + for X, Y, W and H so they are optional
-    local style_pat = "STYLE BG (%S+) FG (%S+) FC (%S+) HOVER (%S+) FNTSZ (%S+) PAD (%S+) DESC (%S+) LINE (%S+) POS (%S+) SIZE (%S+) X (%S*) Y (%S*) W (%S*) H (%S*) MH (%S+) MV (%S+) FONT ([^\n]*)"
-    local bg, fg, flash, hover, font_size, padding, desc_offset, line_offset, pos_mode, size_mode, x, y, w, h, mouse_h, mouse_v, font = string
+    local style_pat =
+    "STYLE BG (%S+) FG (%S+) FC (%S+) HOVER (%S+) FNTSZ (%S+) PAD (%S+) DESC (%S+) LINE (%S+) POS (%S+) SIZE (%S+) X (%S*) Y (%S*) W (%S*) H (%S*) MH (%S+) MV (%S+) FONT ([^\n]*)"
+    local bg, fg, flash, hover, font_size, padding, desc_offset, line_offset, pos_mode, size_mode, x, y, w, h, mouse_h, mouse_v, font =
+        string
         .match(str
-            , style_pat)
+        , style_pat)
     if bg == nil then
         return nil
     end
@@ -453,8 +454,8 @@ function UI(actions, layout, shown, window_name)
                 end
 
                 local screen_left, screen_top, screen_right, screen_bot = reaper.JS_Window_GetViewportFromRect(10, 10, 10
-                    , 10
-                    , true)
+                , 10
+                , true)
 
 
                 if left <= 0 then
@@ -744,7 +745,7 @@ function KeyPopup(id, own_index)
         if getchar > 0 then
             key = getchar
             local cap = gfx.mouse_cap
-            key_text = ToChar(getchar, cap)
+            key_text = ToKeyText(getchar, cap)
             cmd = cap & 4 == 4
             shift = cap & 8 == 8
             alt = cap & 16 == 16
@@ -795,7 +796,9 @@ function KeyPopup(id, own_index)
                 return false
             end
             return true, key, key_text, cmd, shift, alt, ctrl
-        else return false end
+        else
+            return false
+        end
     end
 end
 
@@ -804,7 +807,24 @@ function SetDirty(file)
     last_dirty_name = file.name
 end
 
-function ToChar(int, cap)
+function TryUTFChar(int)
+    return pcall(function() return utf8.char(int) end)
+end
+
+function ToUTFChar(int)
+    local utfOffset = 1962934272; -- 'u' << 24
+    local OK, char = TryUTFChar(int)
+    if OK then
+        return char
+    end
+    OK, char = TryUTFChar(int - utfOffset)
+    if OK then
+        return char
+    end
+    return "?"
+end
+
+function ToKeyText(int, cap)
     local os = reaper.GetOS()
     local is_osx = os == "OSX32" or os == "OSX64" or os == "macOS-arm64"
     local cmd_txt = "Cmd "
@@ -859,19 +879,19 @@ function ToChar(int, cap)
     ctrl = cap & 32 == 32
     if (cmd or ctrl) and int >= 1 and int <= 26 then
         int = int + 96 - 32
-        return mods(false) .. utf8.char(int)
+        return mods(false) .. ToUTFChar(int)
     elseif cmd and alt and int >= 257 and int <= 282 then
         int = int - 160 - 32
-        return mods(false) .. utf8.char(int)
+        return mods(false) .. ToUTFChar(int)
     elseif alt and int >= 321 and int <= 346 then
         int = int - 256
-        return mods(false) .. utf8.char(int)
+        return mods(false) .. ToUTFChar(int)
     elseif keys[int] ~= nil then
         return mods(false) .. keys[int]
     elseif int >= 33 and int <= 255 then
-        return mods(true) .. utf8.char(int)
+        return mods(false) .. ToUTFChar(int)
     else
-        return mods(false) .. utf8.char(int)
+        return mods(false) .. ToUTFChar(int)
     end
 end
 
@@ -914,19 +934,31 @@ end
 
 function Parse_V0(file, txt)
     local function sectionId(section_str)
-        if section_str == "MAIN" then return 1
-        elseif section_str == "MALT" then return 2
-        elseif section_str == "MIDI" then return 3
-        elseif section_str == "EVNT" then return 4
-        elseif section_str == "MEXP" then return 5 end
+        if section_str == "MAIN" then
+            return 1
+        elseif section_str == "MALT" then
+            return 2
+        elseif section_str == "MIDI" then
+            return 3
+        elseif section_str == "EVNT" then
+            return 4
+        elseif section_str == "MEXP" then
+            return 5
+        end
     end
 
     local function commandPat(section_str)
-        if section_str == "MAIN" then return "reaper%.Main_OnCommand%((%d+),0%)"
-        elseif section_str == "MALT" then return "reaper%.Main_OnCommand%((%d+),0%)"
-        elseif section_str == "MIDI" then return "reaper%.MIDIEditor_OnCommand%(midi_editor,(%d+)%)"
-        elseif section_str == "EVNT" then return "reaper%.MIDIEditor_OnCommand%(midi_editor,(%d+)%)"
-        elseif section_str == "MEXP" then return "reaper%.JS_Window_OnCommand%(explorerHWND,(%d+)%)" end
+        if section_str == "MAIN" then
+            return "reaper%.Main_OnCommand%((%d+),0%)"
+        elseif section_str == "MALT" then
+            return "reaper%.Main_OnCommand%((%d+),0%)"
+        elseif section_str == "MIDI" then
+            return "reaper%.MIDIEditor_OnCommand%(midi_editor,(%d+)%)"
+        elseif section_str == "EVNT" then
+            return "reaper%.MIDIEditor_OnCommand%(midi_editor,(%d+)%)"
+        elseif section_str == "MEXP" then
+            return "reaper%.JS_Window_OnCommand%(explorerHWND,(%d+)%)"
+        end
     end
 
     local section_pat = "--SEC:(%w%w%w%w)"
@@ -957,7 +989,7 @@ function Parse_V0(file, txt)
             ctrl = ctrl,
             alt = alt,
             exit = exit,
-            key_text = ToChar(tonumber(key_id), ToCap(shift, cmd, ctrl, alt)),
+            key_text = ToKeyText(tonumber(key_id), ToCap(shift, cmd, ctrl, alt)),
             action_text = command_text,
             display_name = names[#file.actions + 1],
             native = native
@@ -974,18 +1006,25 @@ end
 
 function Parse_V1(file, txt)
     local function sectionId(section_str)
-        if section_str == "MAIN" then return 1
-        elseif section_str == "MALT" then return 2
-        elseif section_str == "MIDI" then return 3
-        elseif section_str == "EVNT" then return 4
-        elseif section_str == "MEXP" then return 5 end
+        if section_str == "MAIN" then
+            return 1
+        elseif section_str == "MALT" then
+            return 2
+        elseif section_str == "MIDI" then
+            return 3
+        elseif section_str == "EVNT" then
+            return 4
+        elseif section_str == "MEXP" then
+            return 5
+        end
     end
 
     file.actions = {}
     local section_pat = "--SEC:(%w%w%w%w)"
     local section_str = string.match(txt, section_pat)
     file.section = sectionId(section_str)
-    local metadata_pat = "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+)%s+NATIVE (%S+)%s+ID (%S+)%s+EXIT (%S+)%s+DISPLAY ([^\n]+)"
+    local metadata_pat =
+    "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+)%s+NATIVE (%S+)%s+ID (%S+)%s+EXIT (%S+)%s+DISPLAY ([^\n]+)"
     for key, shift, cmd, alt, ctrl, native, id, exit, display in string.gmatch(txt, metadata_pat) do
         key = tonumber(key)
         shift = ToBool(shift)
@@ -1013,7 +1052,7 @@ function Parse_V1(file, txt)
             display_name = display,
             action_text = action_text,
             native = native,
-            key_text = ToChar(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
+            key_text = ToKeyText(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
         })
     end
     local show_after_pat = "show_after = (%d%.%d)"
@@ -1026,18 +1065,25 @@ end
 
 function Parse_V3(file, txt)
     local function sectionId(section_str)
-        if section_str == "MAIN" then return 1
-        elseif section_str == "MALT" then return 2
-        elseif section_str == "MIDI" then return 3
-        elseif section_str == "EVNT" then return 4
-        elseif section_str == "MEXP" then return 5 end
+        if section_str == "MAIN" then
+            return 1
+        elseif section_str == "MALT" then
+            return 2
+        elseif section_str == "MIDI" then
+            return 3
+        elseif section_str == "EVNT" then
+            return 4
+        elseif section_str == "MEXP" then
+            return 5
+        end
     end
 
     file.actions = {}
     local section_pat = "--SEC:(%w%w%w%w)"
     local section_str = string.match(txt, section_pat)
     file.section = sectionId(section_str)
-    local action_pat = "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+) NATIVE (%S+) ID (%S+) EXIT (%S+) DISPLAY ([^\n]+)"
+    local action_pat =
+    "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+) NATIVE (%S+) ID (%S+) EXIT (%S+) DISPLAY ([^\n]+)"
     local text_pat = "TEXT ([^\n]*)"
     local found_at_least_one = false
     -- Read line by line, skipping empty lines
@@ -1072,7 +1118,7 @@ function Parse_V3(file, txt)
                 display_name = display,
                 action_text = action_text,
                 native = native,
-                key_text = ToChar(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
+                key_text = ToKeyText(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
                 command_exists = action_text ~= ""
             })
             line_used = true
@@ -1111,18 +1157,25 @@ end
 
 function Parse_V4(file, txt)
     local function sectionId(section_str)
-        if section_str == "MAIN" then return 1
-        elseif section_str == "MALT" then return 2
-        elseif section_str == "MIDI" then return 3
-        elseif section_str == "EVNT" then return 4
-        elseif section_str == "MEXP" then return 5 end
+        if section_str == "MAIN" then
+            return 1
+        elseif section_str == "MALT" then
+            return 2
+        elseif section_str == "MIDI" then
+            return 3
+        elseif section_str == "EVNT" then
+            return 4
+        elseif section_str == "MEXP" then
+            return 5
+        end
     end
 
     file.actions = {}
     local section_pat = "--SEC:(%w%w%w%w)"
     local section_str = string.match(txt, section_pat)
     file.section = sectionId(section_str)
-    local action_pat = "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+) NATIVE (%S+) ID (%S+) EXIT (%S+) HIDDEN (%S+) DISPLAY ([^\n]+)"
+    local action_pat =
+    "KEY (%d+) SHIFT (%S+) CMD (%S+) ALT (%S+) CTRL (%S+) NATIVE (%S+) ID (%S+) EXIT (%S+) HIDDEN (%S+) DISPLAY ([^\n]+)"
     local text_pat = "TEXT ([^\n]*)"
     local found_at_least_one = false
     -- Read line by line, skipping empty lines
@@ -1158,7 +1211,7 @@ function Parse_V4(file, txt)
                 display_name = display,
                 action_text = action_text,
                 native = native,
-                key_text = ToChar(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
+                key_text = ToKeyText(tonumber(key), ToCap(shift, cmd, ctrl, alt)),
                 command_exists = action_text ~= "",
                 hidden = hidden
             })
@@ -1308,7 +1361,8 @@ function StyleToString(style)
         w = string.format("%.1f", style.width)
         h = string.format("%.1f", style.height)
     end
-    return string.format("\nSTYLE BG %x FG %x FC %x HOVER %x FNTSZ %.1f PAD %.1f DESC %.1f LINE %.1f POS %d SIZE %d X %s Y %s W %s H %s MH %d MV %d FONT %s"
+    return string.format(
+        "\nSTYLE BG %x FG %x FC %x HOVER %x FNTSZ %.1f PAD %.1f DESC %.1f LINE %.1f POS %d SIZE %d X %s Y %s W %s H %s MH %d MV %d FONT %s"
         ,
         style.background_color, style.foreground_color,
         style.flash_color, style.hover_color, style.font_size, style.padding, style.desc_offset,
@@ -1692,8 +1746,13 @@ function Frame()
                 enter_pressed = enter_pressed or reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Enter())
                 if Button("Ok", -FLT_MIN) or (#new_seq_name ~= 0 and enter_pressed) then
                     new_seq_name = ValidateName(new_seq_name)
-                    local new = { name = new_seq_name, actions = {}, section = selected_section, show_after = 1.0,
-                        style = CloneStyle(default_style) }
+                    local new = {
+                        name = new_seq_name,
+                        actions = {},
+                        section = selected_section,
+                        show_after = 1.0,
+                        style = CloneStyle(default_style)
+                    }
                     table.insert(files, new)
                     SetDirty(new)
                     reaper.ImGui_CloseCurrentPopup(ctx)
@@ -2059,7 +2118,8 @@ function Frame()
                             SaveCurrentStyleToDefaultStyleFile()
                         end
                         if reaper.ImGui_Selectable(ctx, "Apply to all existing sequences", false) then
-                            local msg = "Are you sure you want to apply this style to all existing sequences ?\n This will modify "
+                            local msg =
+                                "Are you sure you want to apply this style to all existing sequences ?\n This will modify "
                                 .. #files .. " sequences."
                             if reaper.ShowMessageBox(msg, "This action is irreversible", 1) == 1 then
                                 for _, file in ipairs(files) do
@@ -2385,8 +2445,14 @@ function Frame()
             local avail_x = reaper.ImGui_GetContentRegionAvail(ctx)
             MoveCursor(0, 6)
             if Button("Add Shortcut", avail_x / 2, 25) then
-                adding = { key_text = "...", action_text = "...", action = -1, key = -1, exit = true,
-                    display_name = "..." }
+                adding = {
+                    key_text = "...",
+                    action_text = "...",
+                    action = -1,
+                    key = -1,
+                    exit = true,
+                    display_name = "..."
+                }
                 key_popup_requested = true
                 waiting_for_key = 0
             end
