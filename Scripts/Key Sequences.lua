@@ -2,8 +2,9 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Correctly escape '\'
---@version 2.0beta7
+--   Fix crash when closing action window when prompted to select an action
+--   Fix MIDI Event List not working
+--@version 2.0
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 
@@ -669,7 +670,7 @@ function ActionPopup(id, section_id)
         end
         reaper.ImGui_Text(ctx, "Pick an action in the action list")
         MoveCursor(0, 7)
-        if ret == -1 or Button("Cancel", -FLT_MIN) then
+        if Button("Cancel", -FLT_MIN) or ret == -1 then
             action_popup_opened = false
             reaper.ImGui_CloseCurrentPopup(ctx)
             reaper.PromptForAction(-1, 0, section_id)
@@ -1499,7 +1500,7 @@ function Save()
         elseif section.name == "Main (alt recording)" then
             return "\n--SEC:MALT\n"
         elseif section.name == "MIDI Event List Editor" then
-            return "\n--SEC:EVNT\n"
+            return "\n--SEC:EVNT\n  midi_editor = reaper.MIDIEditor_GetActive()\n"
         end
     end
 
