@@ -2,9 +2,8 @@
 --@description Key Sequences
 --@about Create key sequence shortcuts
 --@changelog
---   Fix crash when closing action window when prompted to select an action
---   Fix MIDI Event List not working
---@version 2.0
+--   Shift + character in [A-Z] range show up as capital letters
+--@version 2.1
 --@provides
 --   [main] . > souk21_Key Sequences.lua
 
@@ -889,6 +888,9 @@ function ToKeyText(int, cap)
         return mods(false) .. ToUTFChar(int)
     elseif keys[int] ~= nil then
         return mods(false) .. keys[int]
+    elseif int >= 0x41 and int <= 0x5a then
+        -- Different treatment for characters in the [A-Z] range so "Shift + " doesn't show up
+        return mods(true) .. ToUTFChar(int)
     elseif int >= 33 and int <= 255 then
         return mods(false) .. ToUTFChar(int)
     else
