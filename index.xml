@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="c2e0b6dd85243e726a9e74b8b8ee28de74872255">
+<index version="1" name="Souk21 ReaPack" commit="2b21b18288f1411d6cb9b107fc18639254ed9b61">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -138,6 +138,10 @@ Add "Export summary to CSV"]]></changelog>
         <changelog><![CDATA[Fix crash when closing action window when prompted to select an action
 Fix MIDI Event List not working]]></changelog>
         <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/c2e0b6dd85243e726a9e74b8b8ee28de74872255/Scripts/Key%20Sequences.lua</source>
+      </version>
+      <version name="2.1" author="Souk21" time="2023-08-19T09:17:58Z">
+        <changelog><![CDATA[Shift + character in [A-Z] range show up as capital letters]]></changelog>
+        <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/2b21b18288f1411d6cb9b107fc18639254ed9b61/Scripts/Key%20Sequences.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
