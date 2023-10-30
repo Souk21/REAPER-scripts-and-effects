@@ -1,9 +1,8 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.07
+--@version 1.08
 --@changelog
---   Added action for 16, 32 and 4096
---   Added 4096 to menu
+--   Fix last update
 --@metapackage
 --@provides
 --   [main] . > souk21_Set block (buffer) size (menu).lua
@@ -111,6 +110,7 @@ if window ~= nil then
   local hwnd_other
   local use_asio = true
   local arr = reaper.new_array({}, 255)
+  local count = reaper.JS_Window_ArrayAllChild(window, arr)
   local adr = arr.table()
 
   for j = 1, #adr do
