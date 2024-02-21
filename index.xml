@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="95a0de7e0df7067d137bdb8da8ffd6c7ab06c2f4">
+<index version="1" name="Souk21 ReaPack" commit="01dd6b84c436a406ef06e499c1da50844e476b60">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -142,6 +142,11 @@ Fix MIDI Event List not working]]></changelog>
       <version name="2.1" author="Souk21" time="2023-08-19T09:17:58Z">
         <changelog><![CDATA[Shift + character in [A-Z] range show up as capital letters]]></changelog>
         <source main="main" file="souk21_Key Sequences.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/2b21b18288f1411d6cb9b107fc18639254ed9b61/Scripts/Key%20Sequences.lua</source>
+      </version>
+    </reapack>
+    <reapack name="Open floating &quot;Recent Projects&quot; menu at mouse position.lua" type="script" desc="Open floating &quot;Recent Projects&quot; menu at mouse position">
+      <version name="1.0" author="Souk21" time="2024-02-21T11:35:13Z">
+        <source main="main">https://github.com/Souk21/REAPER-scripts-and-effects/raw/01dd6b84c436a406ef06e499c1da50844e476b60/Scripts/Open%20floating%20%22Recent%20Projects%22%20menu%20at%20mouse%20position.lua</source>
       </version>
     </reapack>
     <reapack name="Rename FX Instance.lua" type="script" desc="Rename FX Instance">
