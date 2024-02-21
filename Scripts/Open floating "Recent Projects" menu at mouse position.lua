@@ -1,8 +1,10 @@
 --@author Souk21
 --@description Open floating "Recent Projects" menu at mouse position
 --@changelog
---   Warn and exit if missing dependency
---@version 1.1
+--   Change script name to have author prefix
+--@version 1.2
+--@provides
+--   [main] . > souk21_Open floating "Recent Projects" menu at mouse position.lua
 function msg(str) reaper.ShowConsoleMsg(tostring(str) .. "\n") end
 
 function main()
