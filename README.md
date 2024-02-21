@@ -8,6 +8,7 @@ ReaPack link:
 
 - [Set block (buffer) size](https://forum.cockos.com/showthread.php?t=264010)
 - [Key Sequences](https://forum.cockos.com/showthread.php?t=269134)
+- [Open floating "Recent Projects" menu at mouse position](https://forum.cockos.com/showthread.php?p=2761004)
 - Rename FX Instance
 
 ## JSFX
