@@ -10,13 +10,15 @@ ReaPack link:
 - [Key Sequences](https://forum.cockos.com/showthread.php?t=269134)
 - Rename FX Instance
 
-## MIDI Velocity Compressor
+## JSFX
+
+### MIDI Velocity Compressor
 
 Scale velocity with a 'compressor-like' display
 
 ![MIDI Dynamics Screenshot](VelocityDynamicsScreenshot.png)
 
-## PlayState Mixer
+### PlayState Mixer
 
 Applies a different gain to the track depending on if transport is playing, stopped or recording
 
