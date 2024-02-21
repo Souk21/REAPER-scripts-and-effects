@@ -2,9 +2,9 @@
 --@description Open floating "Recent Projects" menu at mouse position
 --@changelog
 --   Change script name to have author prefix
---@version 1.2
+--@version 1.21
 --@provides
---   [main] . > souk21_Open floating "Recent Projects" menu at mouse position.lua
+--   [main] . > souk21_Open floating Recent Projects menu at mouse position.lua
 function msg(str) reaper.ShowConsoleMsg(tostring(str) .. "\n") end
 
 function main()
