@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="d5cda988e3f81f8b43d806c96795fdc60ae0897d">
+<index version="1" name="Souk21 ReaPack" commit="3fd74b7f73e341c777b2e68566bf9817a6d63009">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
@@ -291,6 +291,23 @@ Code cleanup]]></changelog>
         <source main="main" file="souk21_Set block (buffer) size to 4096.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/d5cda988e3f81f8b43d806c96795fdc60ae0897d/Scripts/Set%20block%20(buffer)%20size.lua</source>
         <source main="main" file="souk21_Double block (buffer) size.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/d5cda988e3f81f8b43d806c96795fdc60ae0897d/Scripts/Set%20block%20(buffer)%20size.lua</source>
         <source main="main" file="souk21_Halve block (buffer) size.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/d5cda988e3f81f8b43d806c96795fdc60ae0897d/Scripts/Set%20block%20(buffer)%20size.lua</source>
+      </version>
+      <version name="1.10" author="Souk21" time="2024-04-14T15:05:55Z">
+        <changelog><![CDATA[Handle preferences window title localization (ie make the script work with non-default langpacks)
+Fix for REAPER < 6.82]]></changelog>
+        <source main="main" file="souk21_Set block (buffer) size (menu).lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size (prompt).lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 16.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 32.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 64.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 128.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 256.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 512.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 1024.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 2048.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Set block (buffer) size to 4096.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Double block (buffer) size.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
+        <source main="main" file="souk21_Halve block (buffer) size.lua">https://github.com/Souk21/REAPER-scripts-and-effects/raw/3fd74b7f73e341c777b2e68566bf9817a6d63009/Scripts/Set%20block%20(buffer)%20size.lua</source>
       </version>
     </reapack>
   </category>
