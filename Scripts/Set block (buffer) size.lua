@@ -1,10 +1,9 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.09
+--@version 1.10
 --@changelog
---   Fix WASAPI and WDL Kernel Streaming with REAPER 7
---   Added "Double" and "Halve" block size
---   Code cleanup
+--   Handle preferences window title localization (ie make the script work with non-default langpacks)
+--   Fix for REAPER < 6.82
 --@metapackage
 --@provides
 --   [main] . > souk21_Set block (buffer) size (menu).lua
@@ -32,72 +31,94 @@ local custom_size = ""
 -- menu if filename ends with "(menu)"
 -- else prompt for size
 
+local function get_selected_size()
+  local current_size = 0.;
+  local current_size_is_known, current_size_str = reaper.GetAudioDeviceInfo("BSIZE")
+  if current_size_is_known then current_size = tonumber(current_size_str) end
+  local prompt = false
+  local selected_size = ""
+  if custom_size ~= "" then
+    selected_size = custom_size
+  else
+    local script_name = ({ reaper.get_action_context() })[2]:match("([^/\\]+)%.lua$") -- Get filename without the extension
+    local filename_size = script_name:match("%d*$")                                   -- Matches digits at the end of filename
+    if filename_size ~= "" then
+      selected_size = filename_size
+    elseif script_name:match("souk21_Double") then
+      selected_size = tostring(current_size * 2)
+    elseif script_name:match("souk21_Halve") then
+      selected_size = tostring(current_size / 2)
+    elseif script_name:match("%(menu%)$") then
+      local menu = "#Block size|"
+      local menu_sizes = {}
+      local buffer_size = 8
+      local current_added = false
+      for _ = 0, 8 do
+        buffer_size = buffer_size * 2
+        if current_size_is_known and not current_added and current_size < buffer_size then
+          menu = menu .. "!" .. tostring(current_size) .. "|"
+          table.insert(menu_sizes, current_size)
+          current_added = true
+        end
+        if buffer_size ~= current_size then
+          menu = menu .. tostring(buffer_size) .. "|"
+          table.insert(menu_sizes, buffer_size)
+        end
+      end
+      if current_size_is_known and not current_added and current_size >= buffer_size then
+        menu = menu .. "!" .. tostring(current_size) .. "|"
+        table.insert(menu_sizes, current_size)
+        current_added = true
+      end
+      menu = menu .. "|Custom..."
+      table.insert(menu_sizes, -1)
+      --Reaper versions are decimal
+      local version = tonumber(reaper.GetAppVersion():match("^[%d%.]+"))
+      --Versions before 6.82 don't support gfx.showmenu without gfx.init on Windows
+      local needs_gfx = version < 6.82
+      if needs_gfx then
+        local gfx_title = "Souk21_SetBlockSizeMenu"
+        gfx.init(gfx_title, 0, 0)
+        local gfx_hwnd = reaper.JS_Window_Find(gfx_title, true)
+        if gfx_hwnd then
+          reaper.JS_Window_Show(gfx_hwnd, "HIDE")
+        end
+        gfx.x = gfx.mouse_x
+        gfx.y = gfx.mouse_y
+      end
+      local selection = gfx.showmenu(menu)
+      if needs_gfx then
+        gfx.quit()
+      end
+      if selection == 0 then return end
+      selected_size = menu_sizes[selection - 1]
+      prompt = selected_size == -1
+    else
+      prompt = true
+    end
+  end
+
+  if prompt then
+    local retval
+    retval, selected_size = reaper.GetUserInputs("Set block size", 1, "Block size", "")
+    if not retval then return end
+  end
+
+  return selected_size
+end
+
 if reaper.JS_Window_Find == nil then
   reaper.ShowMessageBox("You can download it from ReaPack", "This script needs js_ReaScriptAPI to be installed", 0)
   return
 end
 
-local current_size = 0.;
-local current_size_is_known, current_size_str = reaper.GetAudioDeviceInfo("BSIZE")
-if current_size_is_known then current_size = tonumber(current_size_str) end
-
-local prompt = false
-local selected_size = ""
-if custom_size ~= "" then
-  selected_size = custom_size
-else
-  local script_name = ({ reaper.get_action_context() })[2]:match("([^/\\]+)%.lua$")   -- Get filename without the extension
-  local filename_size = script_name:match("%d*$")                                     -- Matches digits at the end of filename
-  if filename_size ~= "" then
-    selected_size = filename_size
-  elseif script_name:match("souk21_Double") then
-    selected_size = tostring(current_size * 2)
-  elseif script_name:match("souk21_Halve") then
-    selected_size = tostring(current_size / 2)
-  elseif script_name:match("%(menu%)$") then
-    local menu = "#Block size|"
-    local menu_sizes = {}
-    local buffer_size = 8
-    local current_added = false
-    for _ = 0, 8 do
-      buffer_size = buffer_size * 2
-      if current_size_is_known and not current_added and current_size < buffer_size then
-        menu = menu .. "!" .. tostring(current_size) .. "|"
-        table.insert(menu_sizes, current_size)
-        current_added = true
-      end
-      if buffer_size ~= current_size then
-        menu = menu .. tostring(buffer_size) .. "|"
-        table.insert(menu_sizes, buffer_size)
-      end
-    end
-    if current_size_is_known and not current_added and current_size >= buffer_size then
-      menu = menu .. "!" .. tostring(current_size) .. "|"
-      table.insert(menu_sizes, current_size)
-      current_added = true
-    end
-    menu = menu .. "|Custom..."
-    table.insert(menu_sizes, -1)
-    local selection = gfx.showmenu(menu)
-    if selection == 0 then return end
-    selected_size = menu_sizes[selection - 1]
-    prompt = selected_size == -1
-  else
-    prompt = true
-  end
-end
-
-if prompt then
-  local retval
-  retval, selected_size = reaper.GetUserInputs("Set block size", 1, "Block size", "")
-  if not retval then return end
-end
-
+local selected_size = get_selected_size()
 if selected_size == nil or selected_size == "" then return end
 
 reaper.Main_OnCommand(1016, 0)  -- Transport: Stop
 reaper.Main_OnCommand(40099, 0) -- Open audio device preferences
-local window = reaper.JS_Window_Find("REAPER Preferences", true)
+local preferences_title = reaper.LocalizeString("REAPER Preferences", "DLG_128", 0)
+local window = reaper.JS_Window_Find(preferences_title, true)
 
 if window == nil then return end
 
@@ -124,7 +145,7 @@ for i = 1, #addresses do
         or protocol == "Dummy Audio" then
       use_asio = false
     end
-  elseif id == 1043 or id == 1045 then   -- "Request block size" checkbox (1043 is osx, 1045 is win)
+  elseif id == 1043 or id == 1045 then -- "Request block size" checkbox (1043 is osx, 1045 is win)
     reaper.JS_WindowMessage_Send(hwnd, "BM_SETCHECK", 0x1, 0, 0, 0)
   end
 end
