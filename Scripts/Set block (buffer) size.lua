@@ -1,8 +1,8 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.12
+--@version 1.13
 --@changelog
---   Replaced "" with '' in 'Set limits...' for Windows compatibilty
+--   Fix last update
 --@metapackage
 --@provides
 --   [main] . > souk21_Set block (buffer) size (menu).lua
@@ -18,7 +18,7 @@
 --   [main] . > souk21_Set block (buffer) size to 4096.lua
 --   [main] . > souk21_Double block (buffer) size.lua
 --   [main] . > souk21_Halve block (buffer) size.lua
---   [main] . > souk21_Set limits for 'double/halve block (buffer) size'.lua
+--   [main] . > souk21_Set limits for double/halve block (buffer) size.lua
 
 -- To use a custom block size:
 -- Enter a custom block size below, between the quotation marks

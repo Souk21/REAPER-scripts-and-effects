@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Souk21 ReaPack" commit="bd49e4198827df4ad3dc9ae0cdaecca4149fa151">
+<index version="1" name="Souk21 ReaPack" commit="52f54470a4161023b40ba55ae80924208cb8e52d">
   <category name="JSFX">
     <reapack name="MIDI Velocity Compressor.jsfx" type="effect" desc="MIDI Velocity Compressor : Souk21">
       <metadata>
