@@ -1,6 +1,6 @@
 --@author Souk21
 --@description Set block/buffer size
---@version 1.13
+--@version 1.14
 --@changelog
 --   Fix last update
 --@metapackage
@@ -18,7 +18,7 @@
 --   [main] . > souk21_Set block (buffer) size to 4096.lua
 --   [main] . > souk21_Double block (buffer) size.lua
 --   [main] . > souk21_Halve block (buffer) size.lua
---   [main] . > souk21_Set limits for double/halve block (buffer) size.lua
+--   [main] . > souk21_Set limits for double and halve block (buffer) size.lua
 
 -- To use a custom block size:
 -- Enter a custom block size below, between the quotation marks
